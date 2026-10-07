@@ -1,0 +1,6 @@
+{
+  "provider": "supabase",
+  "firebaseUrl": "https://nol3-backup-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "mirror": true,
+  "hubs": {}
+}
