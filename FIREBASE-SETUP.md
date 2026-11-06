@@ -1,7 +1,7 @@
 # Badoc Hub — Firebase setup
 
-The app already points at your Realtime Database
-(`nol3-backup-default-rtdb.asia-southeast1.firebasedatabase.app`). Two things left:
+The app points at your Realtime Database:
+`https://badoc-hub-dashboard-default-rtdb.asia-southeast1.firebasedatabase.app`
 
 1. **Rules** — Firebase console → Realtime Database → Rules → paste, then Publish:
 
@@ -13,13 +13,7 @@ The app already points at your Realtime Database
          }
        }
 
-   (Test-mode rules expire after 30 days, which would silently stop syncing.)
+2. **Optional** — paste `apiKey` / `appId` into `BADOC_FIREBASE_CONFIG` in `index.html`.
+   Sync works with `databaseURL` alone.
 
-2. **Optional config** — in `index.html`, find `BADOC_FIREBASE_CONFIG` and paste your
-   `apiKey` / `appId` from Project settings → Your apps → Web app. Sync works with
-   `databaseURL` alone.
-
-Then open Settings → *Test Cloud Connection*. All green = every device syncs.
-
-Data lives under `/badoc` (rows, blobs, meta). Files are gzip-compressed before upload and
-cached on each device, so downloads stay small.
+3. Open the hub from your GitHub link → Settings → *Test Cloud Connection*.
