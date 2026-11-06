@@ -1,6 +1,0 @@
-{
-  "provider": "firebase",
-  "firebaseUrl": "https://nol3-backup-default-rtdb.asia-southeast1.firebasedatabase.app",
-  "mirror": false,
-  "hubs": {}
-}
