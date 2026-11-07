@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v2">
+<meta name="badoc-app-version" content="v8">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -376,10 +376,10 @@ window.DASHBOARD_V2 = {
 <link rel="apple-touch-icon" sizes="192x192" href="./icons/badoc-hub-spx-round-v3-192.png">
 
 
+<style id="riders-active-only-filter-style">
 /* Riders Data active-only filter */
 .riders-active-only-control{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 11px;border:1px solid var(--c-2d566b-border);border-radius:8px;background:var(--c-131313-bg);color:var(--c-dce8ee-text);font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;box-sizing:border-box}
 .riders-active-only-control input{width:15px;height:15px;margin:0;accent-color:#1683ff;cursor:pointer}
-
 </style>
 
 <!-- BADOC HUB: permanent 80% default scale -->
@@ -7326,8 +7326,60 @@ img,svg,canvas,video{max-width:100%}
 .app-version-setting b{margin-left:auto;color:var(--c-1683ff-text);font-size:11px;white-space:nowrap;}
 @media(max-width:700px){.app-version-badge{padding:5px 6px;font-size:8px;}}
 </style>
+
+<style id="riders-toolbar-layout-fix-v8">
+/* Compact, single-row desktop controls for Riders Data. */
+#ridersData .riders-toolbar{
+  display:grid!important;
+  grid-template-columns:minmax(230px,1fr) minmax(112px,132px) minmax(112px,132px) max-content max-content max-content!important;
+  align-items:end!important;
+  justify-content:stretch!important;
+  gap:8px!important;
+  flex-wrap:nowrap!important;
+  width:100%;
+  min-width:0;
+  margin:0 0 12px!important;
+}
+#ridersData .riders-toolbar>div{min-width:0!important;flex:none!important;margin:0!important}
+#ridersData .riders-toolbar .riders-search-field input{display:block;width:100%;min-width:0!important;max-width:100%;box-sizing:border-box}
+#ridersData .riders-toolbar .riders-vehicle-field select,
+#ridersData .riders-toolbar .riders-status-field select{display:block;width:100%;min-width:0!important;max-width:100%;box-sizing:border-box}
+#ridersData .riders-toolbar .riders-active-only-control{
+  display:inline-flex!important;align-items:center!important;justify-content:flex-start!important;
+  align-self:end!important;justify-self:start!important;width:max-content!important;min-width:0!important;
+  min-height:38px!important;margin:0!important;padding:0 10px!important;gap:8px!important;
+  white-space:nowrap!important;box-sizing:border-box!important;
+}
+#ridersData .riders-toolbar .riders-active-only-control input{
+  width:15px!important;height:15px!important;min-width:15px!important;margin:0!important;flex:0 0 15px!important;
+}
+#ridersData .riders-toolbar .riders-upload-control,
+#ridersData .riders-toolbar .riders-clear-control{
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  justify-self:start!important;align-self:end!important;width:max-content!important;min-width:0!important;
+  max-width:none!important;min-height:38px!important;height:38px!important;
+  margin:0!important;padding:0 11px!important;white-space:nowrap!important;
+  box-sizing:border-box!important;line-height:1!important;
+}
+#ridersData .riders-toolbar .riders-upload-control input{display:none!important}
+@media(max-width:1000px){
+  #ridersData .riders-toolbar{grid-template-columns:minmax(190px,1fr) minmax(105px,125px) minmax(105px,125px) max-content!important;row-gap:8px!important}
+  #ridersData .riders-toolbar .riders-active-only-control{grid-column:1/3!important}
+  #ridersData .riders-toolbar .riders-upload-control{grid-column:3!important}
+  #ridersData .riders-toolbar .riders-clear-control{grid-column:4!important}
+}
+@media(max-width:700px){
+  #ridersData .riders-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+  #ridersData .riders-toolbar .riders-search-field{grid-column:1/-1!important}
+  #ridersData .riders-toolbar .riders-vehicle-field,
+  #ridersData .riders-toolbar .riders-status-field{grid-column:auto!important}
+  #ridersData .riders-toolbar .riders-active-only-control{grid-column:1/-1!important;justify-self:start!important}
+  #ridersData .riders-toolbar .riders-upload-control,
+  #ridersData .riders-toolbar .riders-clear-control{grid-column:auto!important;width:100%!important}
+}
+</style>
 </head>
-<body data-app-version="4">
+<body data-app-version="8">
 
 <div class="app">
 <aside class="side"><button id="sideCollapseBtn" class="side-collapse-btn" type="button" aria-label="Collapse menu" title="Collapse menu">‹</button>
@@ -7398,7 +7450,7 @@ img,svg,canvas,video{max-width:100%}
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v7</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v8</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -7671,13 +7723,13 @@ img,svg,canvas,video{max-width:100%}
 <section id="ridersData" class="page">
   <div class="section">
     <div class="area-head"><h2>Riders Data <span id="ridersMeta"></span></h2></div>
-    <div class="toolbar" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
-      <div style="min-width:260px;flex:1"><label for="ridersSearch">Search Rider</label><input id="ridersSearch" type="search" placeholder="Driver name, ID, plate, agency…" autocomplete="off"></div>
-      <div><label for="ridersVehicle">Vehicle Type</label><select id="ridersVehicle"><option value="">All</option></select></div>
-      <div><label for="ridersStatus">SPX Status</label><select id="ridersStatus"><option value="">All</option></select></div>
+    <div class="toolbar riders-toolbar" role="group" aria-label="Riders Data filters and actions">
+      <div class="riders-search-field"><label for="ridersSearch">Search Rider</label><input id="ridersSearch" type="search" placeholder="Driver name, ID, plate, agency…" autocomplete="off"></div>
+      <div class="riders-vehicle-field"><label for="ridersVehicle">Vehicle Type</label><select id="ridersVehicle"><option value="">All</option></select></div>
+      <div class="riders-status-field"><label for="ridersStatus">SPX Status</label><select id="ridersStatus"><option value="">All</option></select></div>
       <label class="riders-active-only-control" for="ridersActiveOnly"><input id="ridersActiveOnly" type="checkbox" checked><span>Show active riders only</span></label>
-      <label class="btn" style="cursor:pointer">Upload Riders CSV<input id="ridersCsvFile" type="file" accept=".csv,text/csv" style="display:none"></label>
-      <button type="button" class="btn danger" id="clearAllRidersData" title="Clear all Riders Data from this device and shared cloud storage">Clear All Rider Data</button>
+      <label class="btn riders-upload-control" style="cursor:pointer">Upload Riders CSV<input id="ridersCsvFile" type="file" accept=".csv,text/csv" style="display:none"></label>
+      <button type="button" class="btn danger riders-clear-control" id="clearAllRidersData" title="Clear all Riders Data from this device and shared cloud storage">Clear All Rider Data</button>
     </div>
     <div id="ridersSummary" class="kpis" style="margin-top:12px"></div>
     <div style="overflow:auto;margin-top:12px">
@@ -7920,7 +7972,6 @@ UPLOAD TO PARCEL COUNT</div>
 
 <section id="settings" class="page">
 
-</style>
 <div id="cloudTestCard">
   <button id="cloudTestBtn" type="button">Test Cloud Connection</button>
   <span id="cloudTestResult">Not tested</span>
@@ -7932,7 +7983,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v7</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v8</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
