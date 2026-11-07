@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta name="badoc-main-app" content="v70-cfr-capture-dual-save">
+<meta name="badoc-main-app" content="v1">
+<meta name="badoc-app-version" content="v1">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -7303,9 +7304,25 @@ img,svg,canvas,video{max-width:100%}
   .main{padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
 }
 
+
+
+/* User-facing application version badge. Update the meta value and labels together for future releases. */
+.app-version-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:5px 9px;border:1px solid var(--c-1683ff55-border);
+  border-radius:999px;background:var(--c-1683ff12-bg);
+  color:var(--c-1683ff-text);font-size:9px;font-weight:900;
+  letter-spacing:.045em;white-space:nowrap;line-height:1;
+}
+.app-version-setting{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:10px 12px;
+  border:1px solid var(--c-1683ff33-border);border-radius:9px;background:var(--c-1683ff08-bg);}
+.app-version-setting strong{font-size:12px;color:var(--text);}
+.app-version-setting span{font-size:11px;color:var(--muted);}
+.app-version-setting b{margin-left:auto;color:var(--c-1683ff-text);font-size:11px;white-space:nowrap;}
+@media(max-width:700px){.app-version-badge{padding:5px 6px;font-size:8px;}}
 </style>
 </head>
-<body data-app-version="7.0">
+<body data-app-version="1">
 
 <div class="app">
 <aside class="side"><button id="sideCollapseBtn" class="side-collapse-btn" type="button" aria-label="Collapse menu" title="Collapse menu">‹</button>
@@ -7376,6 +7393,7 @@ img,svg,canvas,video{max-width:100%}
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v1</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -7908,7 +7926,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v1</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -16863,15 +16881,37 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     ? "SPX Bridge not connected. This page is opened as a local file: in Chrome go to chrome://extensions, open SPX BRIDGE > Details, turn on \"Allow access to file URLs\", then reload this page."
     : "SPX Bridge not connected. Make sure the SPX BRIDGE extension is installed and enabled, then reload this page.";
   const bridgeReady=()=>{try{return !!(window.__badocSpxBridgeReady&&window.__badocSpxBridgeReady())}catch(e){return false}};
+  // The bridge-ready flag is set only after the page performs a HELLO/READY
+  // handshake. Individual sync buttons perform that handshake themselves via
+  // __badocEnsureSpxBridge; Sync All must do the same instead of reading the
+  // initially-false flag and incorrectly skipping every SPX step.
+  let bridgePreflightPromise=null;
+  async function ensureBridgeForSyncAll(){
+    if(bridgePreflightPromise)return bridgePreflightPromise;
+    bridgePreflightPromise=(async()=>{
+      if(bridgeReady())return true;
+      const ensure=window.__badocEnsureSpxBridge;
+      if(typeof ensure!=="function")return false;
+      try{return !!(await ensure());}
+      catch(error){console.warn("Sync All bridge handshake failed:",error);return false;}
+    })();
+    return bridgePreflightPromise;
+  }
 
   function spxButtonStep(btnId,statusId){
     return async()=>{
-      if(!bridgeReady())return skip(bridgeHelp());
+      if(!(await ensureBridgeForSyncAll()))return skip(bridgeHelp());
       const btn=$(btnId);
       if(!btn)return skip("Not available");
       if(btn.disabled||btn.dataset.busy==="1")return skip("Already running");
       btn.click();
-      await waitFor(()=>btn.disabled||btn.dataset.busy==="1",8000);
+      const started=await waitFor(()=>btn.disabled||btn.dataset.busy==="1",10000,200);
+      if(!started){
+        const startStatus=statusId&&$(statusId);
+        const startText=((startStatus&&startStatus.textContent)||"").trim();
+        if(startStatus&&startStatus.classList.contains("is-error"))return fail(startText||"Failed to start");
+        return fail("The sync action did not start. Try the individual sync button to see its error message.");
+      }
       const done=await waitFor(()=>!btn.disabled&&btn.dataset.busy!=="1",6*60*1000,500);
       if(cancelled)return skip("Stopped");
       if(!done)return fail("Timed out waiting for SPX");
@@ -16917,6 +16957,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   async function run(){
     if(running){cancelled=true;setBtn("Stopping…",true,"run");return}
     running=true;cancelled=false;
+    bridgePreflightPromise=null;
     const states=STEPS.map(()=>({state:"wait"}));
     const last=$("syncAllLast"),t0=Date.now();
     // The progress panel replaces the per-operation pop-ups while Sync All is running.
