@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-app-v9-pod-pooh-menu-20261107';
+const CACHE_NAME = 'badoc-hub-pwa-app-v10-pod-bridge-detection-20261107';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',

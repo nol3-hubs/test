@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v9">
+<meta name="badoc-app-version" content="v10">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -7451,7 +7451,7 @@ img,svg,canvas,video{max-width:100%}
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v9</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v10</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -7984,7 +7984,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v9</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v10</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -17232,7 +17232,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   const frame=document.getElementById("podPoohCheckerFrame");
   const status=document.getElementById("podCheckerFrameStatus");
   if(!frame||!status)return;
-  let pending=false,loaded=false,timer=0;
+  const REQUIRED_VERSION="69.3.8";
+  let pending=false,loaded=false,timer=0,stage="idle",detectedVersion="";
   function setStatus(message,error=false){
     status.textContent=message||"";
     status.hidden=!message;
@@ -17240,34 +17241,86 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     status.style.background=error?"#fff1f2":"var(--c-eff6ff-bg)";
     status.style.color=error?"#991b1b":"var(--c-1d4ed8-text)";
   }
+  function versionAtLeast(actual,required){
+    const a=String(actual||"").match(/\d+/g)||[],b=String(required||"").match(/\d+/g)||[];
+    if(!a.length)return false;
+    for(let i=0;i<Math.max(a.length,b.length);i++){
+      const av=Number(a[i]||0),bv=Number(b[i]||0);
+      if(av>bv)return true;if(av<bv)return false;
+    }
+    return true;
+  }
+  function stopTimer(){if(timer){clearTimeout(timer);timer=0;}}
+  function finishError(message){pending=false;stage="error";stopTimer();setStatus(message,true);}
+  function requestCheckerUrl(){
+    stage="url";
+    setStatus("SPX BRIDGE detected (v"+detectedVersion+"). Loading POD/POOH Checker…");
+    window.postMessage({source:"BADOC_PAGE",type:"BADOC_GET_POD_CHECKER_URL"},"*");
+    stopTimer();
+    timer=setTimeout(()=>{
+      if(!pending||stage!=="url")return;
+      finishError("SPX BRIDGE v"+detectedVersion+" is connected, but it did not provide the POD/POOH Checker page. Reload SPX BRIDGE in chrome://extensions, then refresh this app.");
+    },7000);
+  }
   window.addEventListener("message",event=>{
     if(event.source!==window)return;
     const data=event.data||{};
     if(data.source!=="BADOC_SPX_BRIDGE")return;
+
+    if(data.type==="BADOC_BRIDGE_READY"){
+      const version=String(data.version||"").trim();
+      if(!pending||stage!=="hello")return;
+      detectedVersion=version||"unknown";
+      if(!versionAtLeast(version,REQUIRED_VERSION)){
+        finishError("SPX BRIDGE is installed and detected (v"+(version||"unknown")+"), but POD/POOH Checker requires v"+REQUIRED_VERSION+" or newer. Update the extension from the latest Badoc Hub package, reload it in chrome://extensions, then refresh this app.");
+        return;
+      }
+      requestCheckerUrl();
+      return;
+    }
+
     if(data.type==="BADOC_POD_CHECKER_URL"){
-      pending=false;clearTimeout(timer);
-      if(!data.url){setStatus("SPX BRIDGE could not provide the POD/POOH Checker page. Reload the extension and refresh Badoc Hub.",true);return;}
-      frame.onload=()=>{loaded=true;setStatus("");};
-      frame.onerror=()=>setStatus("POD/POOH Checker could not be loaded. Reload SPX BRIDGE v69.3.8 and refresh Badoc Hub.",true);
+      if(!pending||stage!=="url")return;
+      stopTimer();
+      const responseVersion=String(data.version||detectedVersion||"").trim();
+      if(!versionAtLeast(responseVersion,REQUIRED_VERSION)){
+        finishError("The installed SPX BRIDGE version (v"+(responseVersion||"unknown")+") does not include the POD/POOH Checker integration. Update the extension to v"+REQUIRED_VERSION+" or newer, then refresh Badoc Hub.");
+        return;
+      }
+      if(!data.url){finishError("SPX BRIDGE was detected, but it returned an empty POD/POOH Checker address. Reload the extension and refresh Badoc Hub.");return;}
+      frame.onload=()=>{loaded=true;pending=false;stage="loaded";setStatus("");};
+      frame.onerror=()=>finishError("SPX BRIDGE responded, but Chrome could not load its checker page. Confirm the latest extension is enabled, reload it in chrome://extensions, and refresh Badoc Hub.");
       frame.src=String(data.url);
+      // A frame can sometimes finish without firing an error event; retain a load timeout.
+      stage="frame";pending=true;
+      timer=setTimeout(()=>{
+        if(pending&&stage==="frame"&&!loaded)finishError("The POD/POOH Checker page did not finish loading. Reload SPX BRIDGE in chrome://extensions and refresh Badoc Hub.");
+      },10000);
+      return;
+    }
+
+    if(data.type==="BADOC_BRIDGE_DISCONNECTED"&&pending){
+      finishError("SPX BRIDGE disconnected while opening the checker. Reload the extension in chrome://extensions and refresh Badoc Hub.");
       return;
     }
     if(data.type==="BADOC_SPX_ERROR"&&!loaded&&pending){
-      pending=false;clearTimeout(timer);
-      setStatus(data.message||"SPX BRIDGE could not load POD/POOH Checker.",true);
+      finishError(data.message||"SPX BRIDGE could not load POD/POOH Checker.");
     }
   });
+
   window.__badocInitPodPoohChecker=function(){
     if(loaded||frame.src&&frame.src!=="about:blank")return;
     if(pending)return;
-    pending=true;
-    setStatus("Connecting to SPX BRIDGE v69.3.8 to load POD/POOH Checker…");
-    window.postMessage({source:"BADOC_PAGE",type:"BADOC_GET_POD_CHECKER_URL"},"*");
+    pending=true;stage="hello";detectedVersion="";
+    setStatus("Checking whether SPX BRIDGE is installed and enabled…");
+    // Explicit handshake avoids mistaking a missing content-script permission
+    // or an older installed extension for an extension that is not installed.
+    window.postMessage({source:"BADOC_PAGE",type:"BADOC_BRIDGE_HELLO"},"*");
+    stopTimer();
     timer=setTimeout(()=>{
-      if(!pending)return;
-      pending=false;
-      setStatus("POD/POOH Checker needs SPX BRIDGE v69.3.8. Update the extension folder from this release, reload it in chrome://extensions, then refresh Badoc Hub.",true);
-    },5000);
+      if(!pending||stage!=="hello")return;
+      finishError("SPX BRIDGE was not detected on this page. It may already be installed, but Chrome may not allow it to access this site. Open chrome://extensions → SPX BRIDGE → Details → Site access, allow https://nol3-hubs.github.io/* (or choose On all sites), make sure the extension is enabled, then refresh this app.");
+    },6000);
   };
 })();
 </script>
