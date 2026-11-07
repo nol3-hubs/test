@@ -7393,7 +7393,7 @@ img,svg,canvas,video{max-width:100%}
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v4</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v5</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -7926,7 +7926,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v4</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v5</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -8077,7 +8077,7 @@ badoc:[
 ["AR-ARUSIP"],["ALAY-NANGBABAAN (ALAY 15-B)"],["NAGREBCAN"],["BALBALDEZ"],[""],
 ["SAUD"],["PAGSANAHAN NORTE"],["PAGSANAHAN SUR"],[""],["LA VIRGEN MILAGROSA (PAGUETPET)"],["MORONG"],["SANTA CRUZ NORTE"],["SANTA CRUZ SUR"],[""],
 ["ALOGOOG"],["LACUBEN"],["ARING"],[""],["CANAAN (POB.)"],["GARRETA (POB.)"],[""],
-["GABUT NORTE"],["GABUT SUR"],["NAPU"],["MABUSAG NORTE"],["MABUSAG SUR"],["PARANG"],["PASUC"]
+["GABUT NORTE"],["GABUT SUR"],["NAPU"],["MABUSAG NORTE"],["MABUSAG SUR"],["PARANG"],["PASUC"],[""],["MAGLAOI SUR"]
 ],
 pinili:[
 ["UGUIS"],["CAMANGA"],["MADUPAYAS"],["LILIPUTEN"],["LUMBAAN-BICBICA"],["SACRITAN"],[""],["AGLIPAY"],["SANTO TOMAS"],["CABAROAN"],["BUANGA"],[""],
@@ -8085,6 +8085,19 @@ pinili:[
 ["APATUT-LUBONG"],["DARAT"],["CAPANGDANAN"],["GULPENG"],[""],["BADIO"],["BULBULALA"],["PUZOL"],["TARTARABANG"]
 ]};
 let towns=DEFAULTS;
+const REQUIRED_BADOC_TOWNS=["MAGLAOI SUR"];
+function ensureRequiredBadocTowns(){
+  if(!towns||typeof towns!=="object"||Array.isArray(towns))towns={badoc:[],pinili:[]};
+  if(!Array.isArray(towns.badoc))towns.badoc=[];
+  const existing=new Set(towns.badoc.map(value=>Array.isArray(value)?value[0]:value).map(value=>String(value??"").trim().replace(/\s+/g," ").toUpperCase()).filter(Boolean));
+  let changed=false;
+  REQUIRED_BADOC_TOWNS.forEach(name=>{
+    const key=String(name).trim().replace(/\s+/g," ").toUpperCase();
+    if(key&&!existing.has(key)){towns.badoc.push([name]);existing.add(key);changed=true;}
+  });
+  return changed;
+}
+ensureRequiredBadocTowns();
 let batches=[];
 let current=null, role="Admin", undoBatch=null;
 const $=id=>document.getElementById(id);
@@ -8135,7 +8148,7 @@ async function saveBatches(){
     });
   }catch(e){ console.warn("IndexedDB save failed; continuing in session memory.",e); memoryOnlyStorage=true; }
 }
-function saveTownSettings(){localStorage.setItem("pr_towns",JSON.stringify(towns))}
+function saveTownSettings(){ensureRequiredBadocTowns();localStorage.setItem("pr_towns",JSON.stringify(towns))}
 function norm(s){return String(s??"").trim().replace(/\s+/g," ").toUpperCase()}
 
 /* v274 Phase 1 performance cache: normalize frequently-used parcel fields once per row.
@@ -12313,7 +12326,10 @@ window.DASHBOARD_V2_READY = true;
       try{
         const parsed=JSON.parse(await b.text());
         towns=Array.isArray(parsed)?parsed:(parsed?.towns||towns);
+        const requiredTownsAdded=ensureRequiredBadocTowns();
         try{localStorage.setItem("pr_towns",JSON.stringify(towns))}catch{}
+        // Publish the merged town list once so the new Badoc town is present on every device.
+        if(requiredTownsAdded&&typeof saveTownSettings==="function")saveTownSettings();
       }catch(e){console.warn("Settings parse:",e)}
     }
     // Riders Data is stored separately from town settings.
@@ -13078,7 +13094,7 @@ window.updateOperationProgress=function(){
   const after3pm=mins>=900;
   const forecastWindow=mins>=900 || mins<180;
   const stations=["BADOC HUB","CAGAYAN DC","SOC 6"];
-  // Exact 57-town allowlist: 29 Badoc + 28 Pinili.
+  // Exact 58-town allowlist: 30 Badoc + 28 Pinili.
   // Normalize punctuation/case so CSV values such as AR-ARUSIP and
   // ALAY-NANGBABAAAN (ALAY 15-B) match the configured names exactly.
   const allowedTomorrowTowns=new Set([
@@ -13091,7 +13107,8 @@ window.updateOperationProgress=function(){
     "UGUIS","CAMANGA","MADUPAYAS","LILIPUTEN","LUMBAAN-BICBICA","SACRITAN",
     "AGLIPAY","SANTO TOMAS","CABAROAN","BUANGA","PURITAC","DALAYAP","NAGTRIGOAN",
     "UPON","VALBUENA (POB.)","PAGDILAO (POB.)","SALANAP","BARBAR","BUNGRO","PUGAOAN",
-    "APATUT-LUBONG","DARAT","CAPANGDANAN","GULPENG","BADIO","BULBULALA","PUZOL","TARTARABANG"
+    "APATUT-LUBONG","DARAT","CAPANGDANAN","GULPENG","BADIO","BULBULALA","PUZOL","TARTARABANG",
+    "MAGLAOI SUR"
   ].map(norm));
   const townName=r=>String((r&&r["Town Name"])??(r&&r["Town"])??(r&&r["town"])??"").trim();
   const tomorrowTownEligible=r=>allowedTomorrowTowns.has(norm(townName(r)));
@@ -13732,9 +13749,9 @@ setInterval(()=>window.updateOperationProgress?.(),30000);
 })();
 </script>
 <script>
-/* FINAL ESTIMATED TOMORROW: exact 57-town allow-list */
+/* FINAL ESTIMATED TOMORROW: exact 58-town allow-list */
 (function(){
-  const BADOC_PINILI_57 = ['Turod','Labut','Caraitan','Paltit','Lubigan','Bato','Ar-Arusip','Alay-Nangbabaan (Alay 15-B)','Nagrebcan','Balbaldez','Saud','Pagsanahan Norte','Pagsanahan Sur','La Virgen Milagrosa (Paguetpet)','Morong','Santa Cruz Norte','Santa Cruz Sur','Alogoog','Lacuben','Aring','Canaan (Pob.)','Garreta (Pob.)','Gabut Norte','Gabut Sur','Napu','Mabusag Norte','Mabusag Sur','Parang','Pasuc','Uguis','Camanga','Madupayas','Liliputen','Lumbaan-Bicbica','Sacritan','Aglipay','Santo Tomas','Cabaroan','Buanga','Puritac','Dalayap','Nagtrigoan','Upon','Valbuena (Pob.)','Pagdilao (Pob.)','Salanap','Barbar','Bungro','Pugaoan','Apatut-Lubong','Darat','Capangdanan','Gulpeng','Badio','Bulbulala','Puzol','Tartarabang'];
+  const BADOC_PINILI_58 = ['Turod','Labut','Caraitan','Paltit','Lubigan','Bato','Ar-Arusip','Alay-Nangbabaan (Alay 15-B)','Nagrebcan','Balbaldez','Saud','Pagsanahan Norte','Pagsanahan Sur','La Virgen Milagrosa (Paguetpet)','Morong','Santa Cruz Norte','Santa Cruz Sur','Alogoog','Lacuben','Aring','Canaan (Pob.)','Garreta (Pob.)','Gabut Norte','Gabut Sur','Napu','Mabusag Norte','Mabusag Sur','Parang','Pasuc','Uguis','Camanga','Madupayas','Liliputen','Lumbaan-Bicbica','Sacritan','Aglipay','Santo Tomas','Cabaroan','Buanga','Puritac','Dalayap','Nagtrigoan','Upon','Valbuena (Pob.)','Pagdilao (Pob.)','Salanap','Barbar','Bungro','Pugaoan','Apatut-Lubong','Darat','Capangdanan','Gulpeng','Badio','Bulbulala','Puzol','Tartarabang','Maglaoi Sur'];
   function etNorm(v){
     return String(v ?? "")
       .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
@@ -13744,10 +13761,11 @@ setInterval(()=>window.updateOperationProgress?.(),30000);
       .replace(/\s+/g," ")
       .trim().toUpperCase();
   }
-  const ET_TOWN_SET = new Set(BADOC_PINILI_57.map(etNorm));
-  window.BADOC_PINILI_57_TOWN_ALLOWED = function(v){
+  const ET_TOWN_SET = new Set(BADOC_PINILI_58.map(etNorm));
+  window.BADOC_PINILI_58_TOWN_ALLOWED = function(v){
     return ET_TOWN_SET.has(etNorm(v));
   };
+  window.BADOC_PINILI_57_TOWN_ALLOWED = window.BADOC_PINILI_58_TOWN_ALLOWED;
 })();
 </script>
 
