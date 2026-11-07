@@ -7393,7 +7393,7 @@ img,svg,canvas,video{max-width:100%}
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v5</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v6</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -7671,7 +7671,8 @@ img,svg,canvas,video{max-width:100%}
       <div><label for="ridersVehicle">Vehicle Type</label><select id="ridersVehicle"><option value="">All</option></select></div>
       <div><label for="ridersStatus">SPX Status</label><select id="ridersStatus"><option value="">All</option></select></div>
       <label class="btn" style="cursor:pointer">Upload Riders CSV<input id="ridersCsvFile" type="file" accept=".csv,text/csv" style="display:none"></label>
-      <button type="button" class="btn" id="clearRidersUpload" title="Clear the uploaded Riders CSV and restore the built-in rider data">Clear Uploaded File</button>
+      <button type="button" class="btn" id="clearRidersUpload" title="Discard the uploaded rider CSV and restore the built-in rider list">Restore Built-in Riders</button>
+      <button type="button" class="btn danger" id="clearAllRidersData" title="Clear all Riders Data from this device and shared cloud storage">Clear All Rider Data</button>
     </div>
     <div id="ridersSummary" class="kpis" style="margin-top:12px"></div>
     <div style="overflow:auto;margin-top:12px">
@@ -7926,7 +7927,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v5</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v6</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -9930,6 +9931,37 @@ function initRidersData(){
     }catch(err){
       console.error("Clear Riders upload:",err);
       $("ridersHint").textContent="Cleared on this device, but the cloud could not be updated ("+((err&&err.message)||"error")+"). Other devices, or a reload, may bring the uploaded file back. Press Clear Uploaded File again when you are online.";
+    }finally{
+      if(btn)btn.disabled=false;
+    }
+  });
+  $("clearAllRidersData")?.addEventListener('click',async()=>{
+    const btn=$("clearAllRidersData");
+    if(!confirm("Clear ALL Riders Data? This removes the uploaded rider list from this device and shared cloud storage. Rider selections and town assignments are not deleted. You can restore the built-in rider list later."))return;
+    if(btn)btn.disabled=true;
+    try{
+      ridersData=[];
+      window.__badocRidersPage=1;
+      const input=$("ridersCsvFile");if(input)input.value="";
+      const search=$("ridersSearch");if(search)search.value="";
+      const vehicle=$("ridersVehicle");if(vehicle)vehicle.value="";
+      const status=$("ridersStatus");if(status)status.value="";
+      initRidersData();
+      renderRiders();
+      const hint=$("ridersHint");
+      if(hint)hint.textContent="All Riders Data cleared on this device. Saving the empty rider list to shared cloud storage…";
+      if(window.__badocClearAllRidersDataShared){
+        const shared=await window.__badocClearAllRidersDataShared();
+        if(hint)hint.textContent=shared
+          ?"All Riders Data cleared on this device and shared cloud storage. The rider table is now empty on all devices."
+          :"Riders Data cleared on this device only. Shared cloud sync is not ready; reconnect and try again to clear it on all devices.";
+      }else if(hint){
+        hint.textContent="Riders Data cleared on this device only. Shared cloud sync is unavailable, so a reload may restore cloud data.";
+      }
+    }catch(err){
+      console.error("Clear all Riders Data:",err);
+      const hint=$("ridersHint");
+      if(hint)hint.textContent="Riders Data is empty on this device, but the shared cloud could not be cleared ("+((err&&err.message)||"error")+"). Reconnect and press Clear All Rider Data again.";
     }finally{
       if(btn)btn.disabled=false;
     }
@@ -12414,8 +12446,10 @@ window.DASHBOARD_V2_READY = true;
         }
         seen.linehaul=Number(s.linehaul_version||0);
       }else if(kind==="settings"){
-        if(Number(s.settings_version||0)>seen.settings)await applySettings();
-        seen.settings=Number(s.settings_version||0);
+        if(!pendingCloudWrites.has("settings")){
+          if(Number(s.settings_version||0)>seen.settings)await applySettings();
+          seen.settings=Number(s.settings_version||0);
+        }
       }else if(kind==="layout"){
         if(Number(s.layout_version||0)>seen.layout)await applyLayout(Number(s.layout_version||0));
         seen.layout=Number(s.layout_version||0);
@@ -12432,7 +12466,8 @@ window.DASHBOARD_V2_READY = true;
         if(!pendingCloudWrites.has("linehaul")&&!linehaulLocalDirty){
           if(!s.linehaul_exists)await clearLocalLinehaul();else if(Number(s.linehaul_version||0)>seen.linehaul)await applyLinehaul();
         }
-        if(Number(s.settings_version||0)>seen.settings)await applySettings();
+        if(!pendingCloudWrites.has("settings")&&Number(s.settings_version||0)>seen.settings)await applySettings();
+        if(!pendingCloudWrites.has("settings"))seen.settings=Number(s.settings_version||0);
         if(Number(s.layout_version||0)>seen.layout)await applyLayout(Number(s.layout_version||0));
         if(Number(s.notes_version||0)>seen.notes){
           await applyNotes();
@@ -12746,6 +12781,38 @@ window.DASHBOARD_V2_READY = true;
     await announce("settings","riders-clear");
     status("Riders upload cleared on all devices");
     return true;
+  };
+
+  // Clear the complete Riders Data list on this device and in shared cloud storage.
+  // Store an explicit empty JSON array (do not delete the object), so later pulls
+  // do not fall back to EMBEDDED_RIDERS_DATA.
+  window.__badocClearAllRidersDataShared=async function(){
+    if(!started)return false;
+    pendingCloudWrites.add("settings");
+    const version=Date.now();
+    const empty=[];
+    try{
+      ridersData=empty;
+      const input=document.getElementById("ridersCsvFile");if(input)input.value="";
+      if(typeof initRidersData==="function")initRidersData();
+      if(typeof renderRiders==="function")renderRiders();
+      let lastErr=null;
+      for(let attempt=0;attempt<3;attempt++){
+        try{
+          await put(P.riders,new Blob(["[]"],{type:"application/json"}),"application/json");
+          await setState({settings_version:version});
+          lastErr=null;
+          break;
+        }catch(e){lastErr=e;await new Promise(r=>setTimeout(r,600*(attempt+1)));}
+      }
+      if(lastErr)throw lastErr;
+      seen.settings=version;
+      await announce("settings","riders-clear-all");
+      status("All Riders Data cleared on all devices");
+      return true;
+    }finally{
+      pendingCloudWrites.delete("settings");
+    }
   };
 
   // Sync Riders Data to the same shared Cloud storage. This does not affect Clear All Data.
