@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SPX BRIDGE",
-  "version": "69.3.4",
+  "version": "69.3.5",
   "description": "Unified SPX BRIDGE for BADOC HUB operations and isolated Received Checking exports.",
   "permissions": [
     "cookies",
@@ -12,7 +12,7 @@
     "https://spx.shopee.ph/*",
     "https://*.susercontent.com/*",
     "https://*.file.susercontent.com/*",
-    "https://*.github.io/*"
+    "https://nol3-hubs.github.io/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -25,7 +25,7 @@
         "http://127.0.0.1/*",
         "https://localhost/*",
         "https://127.0.0.1/*",
-        "https://*.github.io/*"
+        "https://nol3-hubs.github.io/*"
       ],
       "js": [
         "content.js"

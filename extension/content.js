@@ -1,8 +1,12 @@
 (() => {
   // One unified extension serves the host BADOC HUB app and its isolated Received Checking iframe.
   // Connect only when an explicit app marker is present; never connect from the temporary SPX tab.
-  const isReceivedChecking = !!document.querySelector('meta[name="badoc-received-checking"][content="v69"]');
-  const isMainBadocApp = !!document.querySelector('meta[name="badoc-main-app"][content="v69"]') ||
+  const receivedCheckingMarker = document.querySelector('meta[name="badoc-received-checking"]');
+  const mainBadocMarker = document.querySelector('meta[name="badoc-main-app"]');
+  const isReceivedChecking = !!(receivedCheckingMarker && String(receivedCheckingMarker.content || '').trim());
+  // The main app marker changes with dashboard releases (for example v70-*).
+  // Accept the explicit marker regardless of its app build suffix/version.
+  const isMainBadocApp = !!(mainBadocMarker && String(mainBadocMarker.content || '').trim()) ||
     !!document.getElementById('badocSpxBridgeInstallModal') || !!document.getElementById('receivedCheckingFrame');
   if (!isReceivedChecking && !isMainBadocApp) return;
 
@@ -12,10 +16,16 @@
     try { bridgeContextUrl = document.referrer || window.parent.location.href || location.href; }
     catch (_) { bridgeContextUrl = document.referrer || location.href; }
   }
+  function isGithubPagesHost(value) {
+    try {
+      const url = new URL(String(value || ''));
+      return url.protocol === 'https:' && (url.hostname === 'github.io' || url.hostname.endsWith('.github.io'));
+    } catch (_) { return false; }
+  }
   const isAllowedHost =
     bridgeContextUrl.startsWith("file:") ||
     /^(https?:)\/\/(localhost|127\.0\.0\.1)(?::\d+)?\//i.test(bridgeContextUrl) ||
-    /^(https:)\/\/(?:[^./]+\.)+github\.io(?::\d+)?\//i.test(bridgeContextUrl);
+    isGithubPagesHost(bridgeContextUrl);
   if (!isAllowedHost) return;
   if (window.__badocSpxBridgeUnifiedV69) return;
   window.__badocSpxBridgeUnifiedV69 = true;

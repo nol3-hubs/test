@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-blue-v70-firebase';
+const CACHE_NAME = 'badoc-hub-pwa-blue-v70-bridgefix-20261107';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',

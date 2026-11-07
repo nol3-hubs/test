@@ -1814,9 +1814,12 @@ async function runJob(job) {
 
 function isBadocPageUrl(url) {
   const u = String(url || "");
-  return u.startsWith("file://") ||
-    /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?\//i.test(u) ||
-    /^https:\/\/(?:[^./]+\.)+github\.io(?::\d+)?\//i.test(u);
+  if (u.startsWith("file://") || /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?\//i.test(u)) return true;
+  try {
+    const parsed = new URL(u);
+    return parsed.protocol === "https:" &&
+      (parsed.hostname === "github.io" || parsed.hostname.endsWith(".github.io"));
+  } catch (_) { return false; }
 }
 
 function isBadocPageSender(sender) {
