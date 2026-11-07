@@ -27,12 +27,12 @@
     /^(https?:)\/\/(localhost|127\.0\.0\.1)(?::\d+)?\//i.test(bridgeContextUrl) ||
     isGithubPagesHost(bridgeContextUrl);
   if (!isAllowedHost) return;
-  if (window.__badocSpxBridgeUnifiedV69) return;
-  window.__badocSpxBridgeUnifiedV69 = true;
+  if (window.__badocSpxBridgeUnifiedV6937) return;
+  window.__badocSpxBridgeUnifiedV6937 = true;
 
   const PAGE_SOURCE = "BADOC_SPX_BRIDGE";
   const BADOC_SOURCE = "BADOC_PAGE";
-  const VERSION = "69";
+  const VERSION = "69.3.7";
   let port = null;
   let reconnectTimer = null;
   let shuttingDown = false;

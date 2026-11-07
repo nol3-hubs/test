@@ -3,7 +3,7 @@ const TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal
 const SIGNED_URL_PATH = "/spxdata/api/export_platform/export_task/get_signed_download_url";
 const EXPORT_NAME = "inbound_to_from_spx";
 const STATION_ID = 3061; // legacy Badoc fallback only; not used to validate hub-aware jobs
-const VERSION = "69";
+const VERSION = "69.3.7";
 const RIDER_EXPORT_PATH = "/api/driverservice/admin/driver/export";
 const RIDER_TASK_LIST_PATH = "/spxdata/api/export_platform/export_task/list_for_portal";
 const RIDER_EXPORT_NAME = "spx_driver";
@@ -11,6 +11,7 @@ const RIDER_EXPORT_BIZ_NAME = "driver";
 
 
 const POLL_MS = 3000;
+const LINEHAUL_POLL_MS = 2000;
 const MAX_WAIT_MS = 25 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 30000;
 const PARCEL_ORDER_TRACKING_ROUTE = "#/orderTracking";
@@ -99,7 +100,15 @@ const recipientLookupByPort = new WeakMap();
 
 
 const badocPorts = new Set();
-let activeJob = null;
+// Keep export jobs independent so Sync All can run the two parcel exports in
+// parallel, then start Linehaul while the delivery export is still processing.
+// Other SPX jobs remain mutually exclusive to avoid tab/API collisions.
+const activeJobs = new Map();
+const PARALLEL_JOB_ALLOWLIST = {
+  "parcel-inbound": new Set(["parcel-delivery"]),
+  "parcel-delivery": new Set(["parcel-inbound", "linehaul"]),
+  "linehaul": new Set(["parcel-delivery"])
+};
 
 function sendToPort(port, type, data = {}) {
   if (!port) return false;
@@ -113,9 +122,31 @@ function sendToPort(port, type, data = {}) {
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+function canStartActiveJob(kind, ownerPort) {
+  if (activeJobs.has(kind)) return false;
+  const running = [...activeJobs.values()];
+  if (!running.length) return true;
+  const allowed = PARALLEL_JOB_ALLOWLIST[kind];
+  return !!allowed && running.every(job => job.ownerPort === ownerPort && allowed.has(job.kind));
+}
+
+function reserveActiveJob(kind, ownerPort, extra = {}) {
+  if (!canStartActiveJob(kind, ownerPort)) return null;
+  const job = { kind, ownerPort, startedAt: 0, spxTabId: null, cancelled: false, ...extra };
+  activeJobs.set(kind, job);
+  return job;
+}
+
+function releaseActiveJob(job) {
+  if (job && activeJobs.get(job.kind) === job) activeJobs.delete(job.kind);
+}
+
 function sendToBadoc(type, data = {}) {
-  // Every sync stays attached to the page/frame that started it.
-  if (activeJob?.ownerPort) return sendToPort(activeJob.ownerPort, type, data);
+  // Compatible parallel jobs are required to come from the same BADOC page.
+  // Keep all progress/import results attached to that page, not other tabs.
+  const owners = [...new Set([...activeJobs.values()].map(job => job.ownerPort).filter(Boolean))];
+  if (owners.length === 1) return sendToPort(owners[0], type, data);
+  if (owners.length > 1) return owners.reduce((sent, port) => sendToPort(port, type, data) || sent, false);
   let sent = false;
   for (const port of badocPorts) {
     if (sendToPort(port, type, data)) sent = true;
@@ -124,7 +155,11 @@ function sendToBadoc(type, data = {}) {
 }
 
 function progress(message, extra = {}) {
-  sendToBadoc("BADOC_SPX_PROGRESS", { message, ...extra });
+  const phase = String(extra.phase || "");
+  const kind = extra.kind || (phase.startsWith("parcel-delivery") ? "parcel-delivery" :
+    phase.startsWith("parcel-") ? "parcel-inbound" :
+    phase.startsWith("linehaul") ? "linehaul" : undefined);
+  sendToBadoc("BADOC_SPX_PROGRESS", { message, ...extra, ...(kind ? { kind } : {}) });
 }
 
 function riderProgress(message, extra = {}) {
@@ -919,7 +954,7 @@ async function runRiderJob(job) {
     console.error("BADOC SPX rider auto-import failed:", error);
     sendToBadoc("BADOC_SPX_ERROR", { message: error?.message || String(error), kind: "riders" });
   } finally {
-    activeJob = null;
+    releaseActiveJob(job);
   }
 }
 
@@ -1245,7 +1280,7 @@ async function runDeliveringReconcileJob(job) {
     if (tabId) {
       try { await chrome.tabs.remove(tabId); } catch {}
     }
-    activeJob = null;
+    releaseActiveJob(job);
   }
 }
 
@@ -1301,7 +1336,7 @@ async function runParcelDeliveryJob(job) {
       kind: "parcel-delivery"
     });
   } finally {
-    activeJob = null;
+    releaseActiveJob(job);
   }
 }
 
@@ -1380,7 +1415,7 @@ async function runParcelSecondaryJob(job) {
     console.error("BADOC SPX secondary parcel sync failed:", error);
     sendToBadoc("BADOC_SPX_ERROR", { message: error?.message || String(error), kind: "parcel-secondary" });
   } finally {
-    activeJob = null;
+    releaseActiveJob(job);
   }
 }
 
@@ -1449,7 +1484,7 @@ async function runParcelInboundJob(job) {
     });
   } finally {
     // Direct API mode does not create a temporary SPX tab/window.
-    activeJob = null;
+    releaseActiveJob(job);
   }
 }
 
@@ -1466,7 +1501,7 @@ function isTargetTask(task, job) {
   return String(condition?.status ?? "") === "0" || Object.keys(condition).length === 0;
 }
 
-async function waitForCompletion(taskId, startSec, job) {
+async function waitForCompletion(taskId, startSec, job, pollIntervalMs = POLL_MS) {
   const deadline = Date.now() + MAX_WAIT_MS;
   let lastStatus = null;
   let lastQueue = null;
@@ -1508,7 +1543,7 @@ async function waitForCompletion(taskId, startSec, job) {
       });
     }
 
-    await sleep(POLL_MS);
+    await sleep(Math.max(1000, Number(pollIntervalMs)||POLL_MS));
   }
 
   throw new Error("SPX export is still queued after 25 minutes.");
@@ -1762,7 +1797,7 @@ async function runJob(job) {
       Math.floor((job.startedAt - 10 * 60 * 1000) / 1000)
     );
 
-    const completed = await waitForCompletion(taskId, waitStartSec, job);
+    const completed = await waitForCompletion(taskId, waitStartSec, job, LINEHAUL_POLL_MS);
 
     if (!isTargetTask(completed, job)) {
       throw new Error("The completed SPX task does not match the expected Linehaul export.");
@@ -1808,7 +1843,7 @@ async function runJob(job) {
     });
   } finally {
     // Direct API mode does not create or manage a temporary SPX tab/window.
-    activeJob = null;
+    releaseActiveJob(job);
   }
 }
 
@@ -1866,50 +1901,42 @@ chrome.runtime.onConnect.addListener(port => {
     }
 
     if (type === "BADOC_START_PARCEL_SECONDARY_SYNC") {
-      if (activeJob) { failBusy("parcel-secondary"); return; }
-      activeJob = { kind: "parcel-secondary", ownerPort: port, startedAt: 0, spxTabId: null, cancelled: false };
-      void runParcelSecondaryJob(activeJob);
+      const job = reserveActiveJob("parcel-secondary", port);
+      if (!job) { failBusy("parcel-secondary"); return; }
+      void runParcelSecondaryJob(job);
       return;
     }
 
     if (type === "BADOC_START_RECEIVED_CHECKING_INBOUND_SYNC") {
-      if (activeJob) { failBusy("parcel-inbound"); return; }
-      activeJob = {
-        kind: "parcel-inbound", ownerPort: port, receivedChecking: true,
-        startedAt: 0, spxTabId: null, cancelled: false
-      };
-      void runParcelInboundJob(activeJob);
+      const job = reserveActiveJob("parcel-inbound", port, { receivedChecking: true });
+      if (!job) { failBusy("parcel-inbound"); return; }
+      void runParcelInboundJob(job);
       return;
     }
 
     if (type === "BADOC_START_RIDER_SYNC") {
-      if (activeJob) { failBusy("riders"); return; }
-      activeJob = {
-        kind: "riders", ownerPort: port,
+      const job = reserveActiveJob("riders", port, {
         hubName: String(message?.hubName || "").trim(),
         hubCode: String(message?.hubCode || "").trim(),
-        hubId: Number(message?.hubId || 0) || 0,
-        startedAt: 0, spxTabId: null, cancelled: false
-      };
-      void runRiderJob(activeJob);
+        hubId: Number(message?.hubId || 0) || 0
+      });
+      if (!job) { failBusy("riders"); return; }
+      void runRiderJob(job);
       return;
     }
 
     if (type === "BADOC_START_LINEHAUL_SYNC") {
-      if (activeJob) { failBusy("linehaul"); return; }
-      activeJob = {
-        kind: "linehaul", ownerPort: port,
+      const job = reserveActiveJob("linehaul", port, {
         hubName: String(message?.hubName || "").trim(),
         hubCode: String(message?.hubCode || "").trim(),
-        hubId: Number(message?.hubId || 0) || 0,
-        startedAt: 0, spxTabId: null, cancelled: false
-      };
-      void runJob(activeJob);
+        hubId: Number(message?.hubId || 0) || 0
+      });
+      if (!job) { failBusy("linehaul"); return; }
+      void runJob(job);
       return;
     }
 
     if (type === "BADOC_START_DELIVERING_RECONCILE") {
-      if (activeJob) { failBusy("delivering-reconcile", "Another SPX Bridge job is already running."); return; }
       const trackingNumbers = [...new Set((Array.isArray(message.trackingNumbers) ? message.trackingNumbers : [])
         .map(v => String(v || "").trim()).filter(Boolean))];
       if (!trackingNumbers.length) {
@@ -1919,18 +1946,14 @@ chrome.runtime.onConnect.addListener(port => {
         });
         return;
       }
-      activeJob = {
-        kind: "delivering-reconcile", ownerPort: port, trackingNumbers,
-        startedAt: 0, spxTabId: null, cancelled: false
-      };
-      void runDeliveringReconcileJob(activeJob);
+      const job = reserveActiveJob("delivering-reconcile", port, { trackingNumbers });
+      if (!job) { failBusy("delivering-reconcile", "Another SPX Bridge job is already running."); return; }
+      void runDeliveringReconcileJob(job);
       return;
     }
 
     if (type === "BADOC_START_PARCEL_DELIVERY_SYNC") {
-      if (activeJob) { failBusy("parcel-delivery"); return; }
-      activeJob = {
-        kind: "parcel-delivery", ownerPort: port,
+      const job = reserveActiveJob("parcel-delivery", port, {
         hubName: String(message?.hubName || "").trim(),
         hubCode: String(message?.hubCode || "").trim(),
         hubId: Number(message?.hubId || 0) || 0,
@@ -1941,34 +1964,31 @@ chrome.runtime.onConnect.addListener(port => {
         assignedStart: message?.assignedStart,
         assignedEnd: message?.assignedEnd,
         assignedLabel: message?.assignedLabel,
-        createdEndUnix: message?.createdEndUnix,
-        startedAt: 0, spxTabId: null, cancelled: false
-      };
-      void runParcelDeliveryJob(activeJob);
+        createdEndUnix: message?.createdEndUnix
+      });
+      if (!job) { failBusy("parcel-delivery"); return; }
+      void runParcelDeliveryJob(job);
       return;
     }
 
     if (type === "BADOC_START_PARCEL_INBOUND_SYNC") {
-      if (activeJob) { failBusy("parcel-inbound"); return; }
-      activeJob = {
-        kind: "parcel-inbound", ownerPort: port,
+      const job = reserveActiveJob("parcel-inbound", port, {
         hubName: String(message?.hubName || "").trim(),
         hubCode: String(message?.hubCode || "").trim(),
-        hubId: Number(message?.hubId || 0) || 0,
-        startedAt: 0, spxTabId: null, cancelled: false
-      };
-      void runParcelInboundJob(activeJob);
+        hubId: Number(message?.hubId || 0) || 0
+      });
+      if (!job) { failBusy("parcel-inbound"); return; }
+      void runParcelInboundJob(job);
       return;
     }
 
-    if (type === "BADOC_ABORT_SYNC" && activeJob?.ownerPort === port) {
-      activeJob.cancelled = true;
+    if (type === "BADOC_ABORT_SYNC") {
+      for (const job of activeJobs.values()) if (job.ownerPort === port) job.cancelled = true;
     }
   });
-
   port.onDisconnect.addListener(() => {
     badocPorts.delete(port);
-    if (activeJob?.ownerPort === port) activeJob.cancelled = true;
+    for (const job of activeJobs.values()) if (job.ownerPort === port) job.cancelled = true;
     const recipientLookup = recipientLookupByPort.get(port);
     if (recipientLookup) recipientLookup.cancelled = true;
   });
@@ -1987,6 +2007,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     ok: true,
     version: VERSION,
     connected: badocPorts.size > 0,
-    active: Boolean(activeJob)
+    active: activeJobs.size > 0
   });
 });
