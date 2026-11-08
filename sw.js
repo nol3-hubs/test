@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-app-v13-pod-pooh-native-20261108';
+const CACHE_NAME = 'badoc-hub-pwa-app-v14-pod-results-layout-20261108';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',

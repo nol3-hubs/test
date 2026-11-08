@@ -777,7 +777,7 @@ $("disconnectDashboard")?.addEventListener("click",async()=>{
 });
 
 loadSaved().catch(error=>setStatus(`Extension connection required: ${error?.message||String(error)}`,"error"));
-loadDashboardConnection().catch(error=>dashboardStatus(`Extension connection required: ${error?.message||String(error)}`,"error"));
+/* Daily Ops Dashboard connection UI removed from the POD/POOH menu. */
 
 // Open the SPX ePOD Tier Guide in a separate tab.
 document.getElementById('tierGuide')?.addEventListener('click', () => window.open('https://docs.google.com/presentation/d/17NZW-6hoPXw71bYQ70Dcw79YYuEtl0YVAXUTnLLwHkQ/edit?slide=id.g2a12838c453_0_187', '_blank', 'noopener,noreferrer'));

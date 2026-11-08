@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v13">
+<meta name="badoc-app-version" content="v14">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -7696,8 +7696,40 @@ html body #dashboard .btn,html body #linehaul .btn,html body #linehaul .lh-uploa
 @media(max-width:650px){#podPoohChecker .pod-checker-page-toolbar{align-items:stretch}#podPoohChecker .pod-checker-page-actions{width:100%}#podPoohChecker .pod-checker-page-actions button{flex:1 1 140px}#podPoohChecker .card{padding:12px}#podPoohChecker .stat-row{grid-template-columns:repeat(3,minmax(0,1fr))}#podPoohChecker .tier-stat-row{grid-template-columns:repeat(3,minmax(0,1fr))}#podPoohChecker .row button{flex-basis:100%}#podPoohChecker th,#podPoohChecker td{padding:7px}}
 </style>
 
+<style id="pod-pooh-v14-layout-fix">
+/* POD/POOH v14: compact OID entry, wider results, one OID per textarea line. */
+#podPoohChecker .grid{
+  grid-template-columns:minmax(205px,225px) minmax(0,1fr)!important;
+  gap:12px!important;
+  align-items:start!important;
+}
+#podPoohChecker .grid>div{min-width:0!important;}
+#podPoohChecker .grid>div:first-child .card{padding:11px!important;}
+#podPoohChecker #oids{
+  min-height:118px!important;
+  height:118px!important;
+  max-height:160px!important;
+  resize:vertical!important;
+  padding:7px!important;
+  font:10px/1.3 ui-monospace,Consolas,monospace!important;
+  white-space:pre!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+  overflow-x:auto!important;
+  overflow-y:auto!important;
+  tab-size:2;
+}
+#podPoohChecker .grid>div:last-child .card{padding:12px!important;}
+#podPoohChecker .table-wrap{width:100%!important;}
+#podPoohChecker #resultsTable{min-width:100%!important;}
+@media(max-width:950px){
+  #podPoohChecker .grid{grid-template-columns:minmax(0,1fr)!important;}
+  #podPoohChecker #oids{height:104px!important;min-height:104px!important;}
+}
+</style>
+
 </head>
-<body data-app-version="13">
+<body data-app-version="14">
 
 <div class="app">
 <aside class="side"><button id="sideCollapseBtn" class="side-collapse-btn" type="button" aria-label="Collapse menu" title="Collapse menu">‹</button>
@@ -7769,7 +7801,7 @@ html body #dashboard .btn,html body #linehaul .btn,html body #linehaul .lh-uploa
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v13</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v14</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -8302,7 +8334,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v12</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v14</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -8317,40 +8349,20 @@ UPLOAD TO PARCEL COUNT</div>
     </div>
   </section>
 
-<section id="podPoohChecker" class="page pod-pooh-checker-page" aria-label="POD/POOH Checker">
-  <div class="pod-checker-page-toolbar">
-    <div class="pod-checker-page-description">Validate parcel proof-of-delivery and proof-of-on-hold records directly against SPX.</div>
-    <div class="pod-checker-page-actions">
-      <button id="tierGuide" class="pod-checker-button pod-checker-secondary" type="button">POD Tier Guide</button>
-      <button id="openSpx" class="pod-checker-button pod-checker-primary" type="button">Open Proof of On Hold</button>
-    </div>
-  </div>
-<div aria-live="polite" class="oid-toast" id="oidToast" role="status"><span>You can now paste OIDs.</span><button aria-label="Dismiss" id="closeOidToast">×</button></div><div aria-describedby="dashboardNotOpenMessage" aria-labelledby="dashboardNotOpenTitle" aria-modal="true" class="dashboard-modal-overlay" hidden="" id="dashboardNotOpenModal" role="alertdialog">
-<div class="dashboard-modal">
-<h2 id="dashboardNotOpenTitle">Daily Ops Dashboard is not open</h2>
-<p id="dashboardNotOpenMessage">Open your own Daily Ops Dashboard in a Chrome tab first. After the sheet is open and loaded, click <strong>Find Daily Ops Dashboard Sheet</strong> again.</p>
-<button id="closeDashboardNotOpenModal">OK</button>
+<section aria-label="POD/POOH Checker" class="page pod-pooh-checker-page" id="podPoohChecker">
+<div class="pod-checker-page-toolbar">
+<div class="pod-checker-page-description">Validate parcel proof-of-delivery and proof-of-on-hold records directly against SPX.</div>
+<div class="pod-checker-page-actions">
+<button class="pod-checker-button pod-checker-secondary" id="tierGuide" type="button">POD Tier Guide</button>
+<button class="pod-checker-button pod-checker-primary" id="openSpx" type="button">Open Proof of On Hold</button>
 </div>
-</div><div aria-live="polite" aria-modal="true" class="loading-overlay" id="spxLoading" role="dialog"><div class="loading-box"><div class="spinner"></div><h2>Loading SPX Portal…</h2><p>Please wait while the Proof of On Hold page finishes loading. POD Checker will stay open.</p></div></div><div aria-hidden="true" aria-live="polite" aria-modal="true" class="loading-overlay" id="dashboardFindingLoading" role="dialog"><div class="loading-box"><div class="spinner"></div><h2>Finding Daily Ops Dashboard…</h2><p id="dashboardFindingMessage">Searching open Chrome windows and scanning worksheet tabs. Please wait.</p></div></div><div class="grid">
+</div>
+<div aria-live="polite" class="oid-toast" id="oidToast" role="status"><span>You can now paste OIDs.</span><button aria-label="Dismiss" id="closeOidToast">×</button></div><div aria-live="polite" aria-modal="true" class="loading-overlay" id="spxLoading" role="dialog"><div class="loading-box"><div class="spinner"></div><h2>Loading SPX Portal…</h2><p>Please wait while the Proof of On Hold page finishes loading. POD Checker will stay open.</p></div></div><div class="grid">
 <div>
-<section class="card" id="dashboardCard">
-<h2>Connect to Daily Ops Dashboard</h2>
-<p class="muted small">Daily Ops Dashboard should be opened first.</p>
-<div class="row">
-<button class="secondary" id="connectDashboard">Find Daily Ops Dashboard Sheet</button>
-<button disabled="" id="importInventory">Import LM Hub Inventory</button>
-</div>
-<div class="dashboard-picker" hidden="" id="dashboardPicker">
-<label for="dashboardCandidate">Select the correct Daily Ops Dashboard</label>
-<select aria-label="Select the correct Daily Ops Dashboard" id="dashboardCandidate"></select>
-<button disabled="" id="confirmDashboard">Connect Selected Dashboard</button>
-<p class="muted small">Only spreadsheets where LM HUB INVENTORY and its Order ID column were detected are listed. Always verify the title and spreadsheet ID before connecting.</p>
-</div>
-<button class="outline secondary" disabled="" id="disconnectDashboard" style="width:100%">Disconnect Dashboard</button>
-</section>
+
 <section class="card">
 <h2>Paste OIDs</h2>
-<textarea id="oids" placeholder="Paste OIDs here"></textarea>
+<textarea id="oids" placeholder="Paste one OID per line" spellcheck="false" wrap="off"></textarea>
 <div class="row"><button id="check">Check OIDs</button><button class="outline" id="clearOids">Clear OIDs</button></div>
 <div class="status" id="status">Looking for an open SPX portal tab…</div>
 <div class="progress"><div id="progressBar"></div></div>
