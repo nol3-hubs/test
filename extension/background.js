@@ -2010,3 +2010,98 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     active: activeJobs.size > 0
   });
 });
+
+
+// ───────── Integrated POD/POOH Checker background actions ─────────
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.target !== "POD_CHECKER_BACKGROUND") return false;
+
+  // Run Google Sheets requests from the MV3 service worker. This avoids the
+  // extension-page CORS failure seen when calling docs.google.com directly.
+  if (message.action === "FETCH_GOOGLE_TEXT") {
+    (async () => {
+      let requested;
+      try {
+        requested = new URL(String(message.url || ""));
+        if (requested.protocol !== "https:" || requested.hostname !== "docs.google.com" || !requested.pathname.startsWith("/spreadsheets/")) {
+          throw new Error("Blocked Google request: only Google Sheets spreadsheet URLs are allowed.");
+        }
+        const response = await fetch(requested.href, {
+          method: "GET",
+          credentials: "include",
+          redirect: "follow",
+          cache: "no-store"
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          const diagnostic = text
+            .replace(/<script[\s\S]*?<\/script>/gi, " ")
+            .replace(/<style[\s\S]*?<\/style>/gi, " ")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/&nbsp;|&#160;/gi, " ")
+            .replace(/&amp;/gi, "&")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 260);
+          if (response.status === 401 || response.status === 403) {
+            throw new Error(`Google returned HTTP ${response.status}. Confirm this Chrome profile is signed in and has Viewer access to the selected Daily Ops Dashboard.${diagnostic ? ` Google detail: ${diagnostic}` : ""}`);
+          }
+          throw new Error(`Google returned HTTP ${response.status} while reading the selected dashboard.${diagnostic ? ` Google detail: ${diagnostic}` : ""}`);
+        }
+        sendResponse({ ok: true, status: response.status, finalUrl: response.url, text });
+      } catch (error) {
+        const messageText = error?.message || String(error);
+        if (/Failed to fetch|NetworkError|fetch failed/i.test(messageText)) {
+          sendResponse({ ok: false, error: "Google Sheets could not be reached from the extension. Check your internet connection, sign-in, and Google access, then reload the extension and try again." });
+        } else {
+          sendResponse({ ok: false, error: messageText });
+        }
+      }
+    })();
+    return true;
+  }
+
+  if (message.action !== "OPEN_SPX_PORTAL") return false;
+
+  (async () => {
+    const proofOfOnHoldUrl = "https://spx.shopee.ph/#/orderDetail/PROOF_OF_ONHOLD/proof_of_onhold?originUrl=%2ForderTracking&module=am_hubDeliveryManagement&stationType=AM_HUB";
+    // Open SPX as a background tab so the user stays in POD Checker.
+    const tab = await chrome.tabs.create({
+      url: proofOfOnHoldUrl,
+      active: false
+    });
+    // Poll tab state instead of relying on a one-shot onUpdated listener (which can miss
+    // the complete event if it fires immediately after tabs.create).
+    const navDeadline = Date.now() + 60000;
+    let tabState = await chrome.tabs.get(tab.id);
+    while (tabState.status !== "complete" && Date.now() < navDeadline) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      tabState = await chrome.tabs.get(tab.id);
+    }
+    if (tabState.status !== "complete") throw new Error("FMS navigation timed out. The tab is still loading.");
+
+    // Content-script handshake may be delayed while SPX initializes. Retry briefly,
+    // and put a hard deadline around the SPA readiness check to avoid a stuck overlay.
+    let readiness = null;
+    const readyDeadline = Date.now() + 30000;
+    let lastError = null;
+    while (Date.now() < readyDeadline) {
+      try {
+        readiness = await Promise.race([
+          chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "WAIT_FMS_READY" }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("FMS readiness check timed out.")), 20000))
+        ]);
+        if (readiness?.ok) break;
+        lastError = new Error(readiness?.error || "FMS page is not ready yet.");
+      } catch (error) { lastError = error; }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    if (!readiness?.ok) throw new Error(lastError?.message || "FMS page readiness could not be confirmed. The tab opened; you can continue manually.");
+    sendResponse({ ok: true, created: true, loaded: true, pageReady: true, waitedMs: readiness.waitedMs, background: true, tabId: tab?.id, windowId: tab?.windowId, url: proofOfOnHoldUrl });
+  })().catch(error => {
+    console.error("POD Checker could not open the SPX Proof of On Hold page:", error);
+    sendResponse({ ok: false, error: error?.message || String(error) });
+  });
+
+  return true;
+});

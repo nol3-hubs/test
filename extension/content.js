@@ -85,6 +85,16 @@
       return;
     }
 
+    if (data.type === "BADOC_GET_POD_CHECKER_URL") {
+      // Serve the checker from this extension's own origin so it can use
+      // chrome.tabs, chrome.storage, and chrome.scripting inside the iframe.
+      emit("BADOC_POD_CHECKER_URL", {
+        url: chrome.runtime.getURL("pod-checker/app.html"),
+        checkerVersion: "1.5.47"
+      });
+      return;
+    }
+
     const supported = new Set([
       "BADOC_START_LINEHAUL_SYNC",
       "BADOC_START_DELIVERING_RECONCILE",
