@@ -7418,6 +7418,136 @@ html[data-theme="dark"]{--rate-good:#4ade80;--rate-warn:#fb923c;--rate-low:#f871
   .town-row .town{flex:1 1 100%!important;min-width:0!important}
   .town-row .town-statuses{flex:1 1 100%!important;flex-wrap:wrap!important;justify-content:flex-start!important;width:auto!important;max-width:100%!important;gap:4px!important}
 }
+
+/* ═══ Buttons & loading animations — Planning Board, Linehaul Task, progress pop-up ═══ */
+:root{
+  --btn-bg:#fff;--btn-bd:#d0d5dd;--btn-fg:#344054;--btn-hover-bg:#f9fafb;--btn-hover-bd:#b8c0cc;
+  --btn-busy-bg:#f5f8ff;--btn-busy-bd:#c7d7fe;
+  --danger-fg:#b42318;--danger-bd:#fecdca;--danger-hover:#fef3f2;
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+html[data-theme="dark"]{
+  --btn-bg:#111923;--btn-bd:#2b3948;--btn-fg:#dbe5ef;--btn-hover-bg:#172331;--btn-hover-bd:#3b5068;
+  --btn-busy-bg:#10223a;--btn-busy-bd:#27518f;
+  --danger-fg:#f87171;--danger-bd:#5b2a2a;--danger-hover:#2a1517;
+}
+@keyframes bhSpin{to{transform:rotate(360deg)}}
+@keyframes bhSlide{0%{left:-45%}100%{left:105%}}
+@keyframes bhFade{from{opacity:0}to{opacity:1}}
+@keyframes bhPop{0%{opacity:0;transform:translateY(10px) scale(.97)}100%{opacity:1;transform:none}}
+@keyframes bhCheck{0%{transform:scale(.35);opacity:0}60%{transform:scale(1.14);opacity:1}100%{transform:scale(1)}}
+@keyframes bhShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@keyframes bhPulseRing{0%{box-shadow:0 0 0 0 rgba(37,99,235,.28)}100%{box-shadow:0 0 0 10px rgba(37,99,235,0)}}
+
+/* ── base button ── */
+#dashboard .btn,#linehaul .btn,#linehaul .lh-upload{
+  position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:38px;padding:8px 14px;border:1px solid var(--btn-bd)!important;border-radius:10px!important;
+  background:var(--btn-bg)!important;color:var(--btn-fg)!important;box-shadow:none!important;
+  font-size:13px!important;font-weight:600!important;line-height:1.25;letter-spacing:0;text-align:left;white-space:normal!important;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease),transform .08s var(--ease),box-shadow .15s var(--ease);
+}
+#dashboard .btn:hover,#linehaul .btn:hover,#linehaul .lh-upload:hover{background:var(--btn-hover-bg)!important;border-color:var(--btn-hover-bd)!important}
+#dashboard .btn:active,#linehaul .btn:active,#linehaul .lh-upload:active{transform:translateY(1px) scale(.99)}
+#dashboard .btn:disabled:not([data-busy="1"]),#linehaul .btn:disabled:not([data-busy="1"]){opacity:.5;cursor:not-allowed;transform:none}
+
+/* ── primary ── */
+#dashboard .btn.primary,#linehaul .lh-upload{background:var(--accent)!important;border-color:var(--accent)!important;color:#fff!important;justify-content:center;box-shadow:0 1px 2px rgba(16,24,40,.1)!important}
+#dashboard .btn.primary:hover,#linehaul .lh-upload:hover{background:var(--accent-ink)!important;border-color:var(--accent-ink)!important}
+#linehaul .lh-upload{padding:8px 16px}
+#linehaul .lh-upload>span{display:inline-flex;align-items:center;gap:8px;color:#fff!important;font-size:13px!important;font-weight:600!important}
+#linehaul .lh-upload>span::before{content:"";width:16px;height:16px;flex:none;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 16V4M7 9l5-5 5 5M5 20h14'/%3E%3C/svg%3E") center/contain no-repeat;
+          mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 16V4M7 9l5-5 5 5M5 20h14'/%3E%3C/svg%3E") center/contain no-repeat}
+
+/* ── destructive (Clear / Clear All) ── */
+#clearLinehaul,#clearExceptionTracking{color:var(--danger-fg)!important;border-color:var(--danger-bd)!important}
+#clearLinehaul:hover,#clearExceptionTracking:hover{background:var(--danger-hover)!important;border-color:var(--danger-fg)!important}
+
+/* ── SPX import actions: full labels, one clear row each ── */
+.parcel-spx-sync{display:grid!important;grid-template-columns:1fr;gap:8px}
+.parcel-spx-sync>.hint{grid-column:1/-1;min-height:0}
+.parcel-spx-sync>.btn{width:100%;justify-content:flex-start;min-height:44px;padding:10px 14px}
+#dashboard .upload-actions .btn{width:100%}
+
+/* ── toggle ── */
+#parcelIncomingVolumeBtn[aria-pressed="true"]{background:var(--accent-soft)!important;border-color:#c7d7fe!important;color:var(--accent-ink)!important}
+
+/* ── drop zone ── */
+#dashboard .uploadbox{border-radius:12px!important;border:1.5px dashed #c5ceda!important;background:transparent!important;transition:border-color .15s,background .15s}
+#dashboard .uploadbox:hover,#dashboard .uploadbox.dragover{border-color:var(--accent)!important;background:var(--accent-soft)!important}
+#dashboard .uploadbox.dragover .upload-icon{animation:bhPulseRing 1s ease-out infinite;border-radius:50%}
+#dashboard .uploadbox:hover .upload-icon{color:var(--accent)}
+
+/* ── loading state for any button flagged busy ── */
+#dashboard .btn[data-busy="1"],#linehaul .btn[data-busy="1"]{
+  background:var(--btn-busy-bg)!important;border-color:var(--btn-busy-bd)!important;color:var(--accent-ink)!important;cursor:progress;opacity:1;pointer-events:none}
+#dashboard .btn[data-busy="1"]::after,#linehaul .btn[data-busy="1"]::after{
+  content:"";flex:none;width:15px;height:15px;margin-left:auto;border-radius:50%;
+  border:2px solid var(--btn-busy-bd);border-top-color:var(--accent);animation:bhSpin .7s linear infinite}
+#dashboard .btn[data-busy="1"]::before,#linehaul .btn[data-busy="1"]::before{
+  content:"";position:absolute;left:-45%;bottom:0;height:3px;width:45%;border-radius:3px;background:var(--accent);animation:bhSlide 1.15s var(--ease) infinite}
+#linehaul .btn[data-busy="1"]{justify-content:flex-start}
+
+/* ── Linehaul KPI cards ── */
+#linehaul .lh-kpi-card{border-radius:12px!important;border:1px solid #e3e7ec!important;border-image:none!important;background:#fff!important;background-image:none!important;box-shadow:0 1px 2px rgba(16,24,40,.04)!important;transition:border-color .15s,transform .12s var(--ease),box-shadow .15s}
+html[data-theme="dark"] #linehaul .lh-kpi-card{background:var(--panel)!important;border-color:#26323f!important}
+#linehaul .lh-kpi-card:nth-child(4){border-image:none!important}
+#linehaul button.lh-kpi-card{cursor:pointer;text-align:left}
+#linehaul button.lh-kpi-card:hover{border-color:var(--accent)!important;transform:translateY(-1px);box-shadow:0 4px 12px rgba(37,99,235,.12)!important}
+#linehaul button.lh-kpi-card:active{transform:translateY(0)}
+#linehaul .linehaul-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+/* ═══ Progress pop-up (SPX imports) ═══ */
+.badoc-op-backdrop{animation:bhFade .18s ease both}
+.badoc-op-dialog{border-radius:16px!important;animation:bhPop .24s var(--ease) both}
+.badoc-op-icon{border-radius:12px;transition:background .2s,color .2s}
+.badoc-op-backdrop:not(.is-success):not(.is-error):not(.is-info):not(.is-confirm) .badoc-op-icon{animation:bhSpin 1.1s linear infinite;background:var(--accent-soft)!important;color:var(--accent)!important}
+.badoc-op-backdrop.is-success .badoc-op-icon{animation:bhCheck .4s var(--ease) both;background:#ecfdf3!important;color:#067647!important}
+.badoc-op-backdrop.is-error .badoc-op-icon{animation:bhShake .4s ease both;background:#fef3f2!important;color:#b42318!important}
+.badoc-op-backdrop.is-info .badoc-op-icon,.badoc-op-backdrop.is-confirm .badoc-op-icon{background:#fff4ed!important;color:#c2410c!important}
+html[data-theme="dark"] .badoc-op-backdrop.is-success .badoc-op-icon{background:rgba(34,197,94,.16)!important;color:#4ade80!important}
+html[data-theme="dark"] .badoc-op-backdrop.is-error .badoc-op-icon{background:rgba(239,68,68,.16)!important;color:#f87171!important}
+.badoc-op-progress{height:6px!important;background:var(--panel2)!important}
+.badoc-op-progress span{background:var(--accent)!important;animation:badoc-op-sweep 1.15s var(--ease) infinite}
+.badoc-op-state.busy{color:var(--accent-ink)!important;background:var(--accent-soft)!important;border-color:#c7d7fe!important}
+.badoc-op-state.done{color:#067647!important;background:#ecfdf3!important;border-color:#abefc6!important}
+.badoc-op-state.failed{color:#b42318!important;background:#fef3f2!important;border-color:#fecdca!important}
+.badoc-op-actions button{border-radius:10px!important;min-height:38px;transition:background .15s,transform .08s}
+.badoc-op-actions button:active{transform:translateY(1px)}
+.badoc-op-actions .primary{background:var(--accent)!important;border-color:var(--accent)!important}
+.badoc-op-actions .primary:hover:not(:disabled){background:var(--accent-ink)!important}
+
+/* phones */
+@media (max-width:700px){
+  .parcel-spx-sync{grid-template-columns:1fr}
+  #linehaul .linehaul-tools .btn,#linehaul .lh-upload{flex:1 1 100%}
+  #linehaul .linehaul-tools .hint{flex:1 1 100%}
+  .badoc-op-dialog{width:100%!important}
+  .badoc-op-details{grid-template-columns:1fr!important}
+}
+
+/* reduced motion: keep a gentle, slow cue instead of removing the busy indicator */
+@media (prefers-reduced-motion:reduce){
+  #dashboard .btn[data-busy="1"]::after,#linehaul .btn[data-busy="1"]::after{animation:bhSpin 2.4s linear infinite!important;animation-iteration-count:infinite!important}
+  #dashboard .btn[data-busy="1"]::before,#linehaul .btn[data-busy="1"]::before{animation:none!important;left:0;width:100%;opacity:.35}
+  .badoc-op-backdrop:not(.is-success):not(.is-error):not(.is-info):not(.is-confirm) .badoc-op-icon{animation:bhSpin 3s linear infinite!important;animation-iteration-count:infinite!important}
+  .badoc-op-progress span{animation:badoc-op-sweep 2.4s linear infinite!important;animation-iteration-count:infinite!important}
+}
+
+/* stronger selectors where earlier layers use ids + !important */
+html body #dashboard .parcel-spx-sync{grid-template-columns:1fr!important}
+html body #linehaul .lh-kpi-cards .lh-kpi-card{border:1px solid #e3e7ec!important;border-image:none!important;border-image-source:none!important;border-radius:12px!important;background:#fff!important;background-image:none!important;box-shadow:0 1px 2px rgba(16,24,40,.04)!important}
+html[data-theme="dark"] body #linehaul .lh-kpi-cards .lh-kpi-card{background:var(--panel)!important;border-color:#26323f!important}
+html body #linehaul .lh-kpi-cards button.lh-kpi-card:hover{border-color:var(--accent)!important;box-shadow:0 4px 12px rgba(37,99,235,.12)!important}
+html body #dashboard .btn,html body #linehaul .btn,html body #linehaul .lh-upload{overflow:hidden!important}
+@media (max-width:700px){
+  html body #dashboard .parcel-spx-sync>button.btn[id],html body #dashboard .upload-actions>button.btn[id],html body #linehaul .linehaul-tools>button.btn[id]{overflow:hidden!important}
+}
+@media (max-width:700px){
+  html #dashboard #syncParcelInboundFromSPX,html #dashboard #syncParcelDeliveryFromSPX,html #dashboard #reconcileDeliveringViaBatchSearch{overflow:hidden!important}
+}
 </style>
 
 <style id="riders-toolbar-layout-fix-v8">
