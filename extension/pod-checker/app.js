@@ -147,8 +147,15 @@ async function refreshCaptures(){
 }
 $('check').addEventListener("click",async()=>{
  const oids=parseOids();if(!oids.length){setStatus("Paste at least one OID first.","error");return;}
- await saveOids();$('check').disabled=true;results=[];renderResults();$('progressBar').style.width="0%";
+ const checkButton=$('check');
+ if(checkButton.disabled)return;
+ checkButton.disabled=true;
+ results=[];renderResults();$('progressBar').style.width="0%";
+ // Persist the pasted list as best effort only. Local-storage latency or a
+ // reconnecting extension bridge must never prevent the actual OID check.
+ saveOids().catch(error=>console.warn("POD Checker could not save the OID input yet:",error));
  try{
+  setStatus(`Starting ${oids.length} OID check(s)…`);
   setStatus("Preparing SPX Proof of On Hold in the background…");
   await ensureSpxReady();
   const tab=await getSpxTab();
@@ -189,7 +196,7 @@ $('check').addEventListener("click",async()=>{
  }catch(e){setStatus(e.message,"error");}
  finally{$('check').disabled=false;}
 });
-$('clearOids').addEventListener("click",()=>{$('oids').value="";saveOids();});
+$('clearOids').addEventListener("click",()=>{$('oids').value="";saveOids().catch(error=>console.warn("POD Checker could not clear saved OIDs:",error));});
 $('clearResults').addEventListener("click",async()=>{results=[];renderResults();await chrome.storage.local.remove("podAppResults");});
 $('export').addEventListener("click",()=>{
  if(!results.length){setStatus("No results to export yet.");return;}
@@ -203,7 +210,7 @@ $('copy').addEventListener("click",async()=>{
  const text=[["OID","Result","Reason","Status","Driver Name","POD evidence"].join("\t"),...results.map(r=>[r.oid,displayResult(r),r.checkReason,r.deliveryStatus,r.driverName,evidenceText(r)].map(v=>String(v??"").replace(/\t/g," ")).join("\t"))].join("\n");
  try{await navigator.clipboard.writeText(text);setStatus("Results copied to clipboard.","good");}catch(e){setStatus("Clipboard access denied. Export CSV instead.","error");}
 });
-$('oids').addEventListener("input",saveOids);
+$('oids').addEventListener("input",()=>{saveOids().catch(error=>console.warn("POD Checker could not persist the OID input:",error));});
 ['filterResult','filterTier','filterStatus','filterDriver'].forEach(id=>$(id).addEventListener('change',()=>{currentPage=1;renderResults();}));
 $('prevPage').addEventListener('click',()=>{if(currentPage>1){currentPage--;renderResults();}});
 $('nextPage').addEventListener('click',()=>{const total=Math.max(1,Math.ceil(filteredResults().length/PAGE_SIZE));if(currentPage<total){currentPage++;renderResults();}});

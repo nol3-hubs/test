@@ -1,4 +1,4 @@
-const CACHE_NAME = 'badoc-hub-pwa-app-v15-auto-spx-pod-checker-20261108';
+const CACHE_NAME = 'badoc-hub-pwa-app-v16-pod-check-start-fix-20261108';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
