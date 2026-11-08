@@ -1,5 +1,9 @@
 
 (() => {
+  // chrome.scripting.executeScript may re-run this file in an already-open
+  // SPX tab. Keep exactly one message listener in the isolated world.
+  if (window.__POOD_CHECKER_CONTENT_INSTALLED__) return;
+  window.__POOD_CHECKER_CONTENT_INSTALLED__ = true;
   const pending = new Map();
   let seq = 1;
   window.addEventListener("message", event => {

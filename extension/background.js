@@ -2102,6 +2102,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (tabState.status !== "complete") throw new Error("SPX navigation timed out. The background tab is still loading.");
 
+    // A tab may have been open before Badoc Hub Extesion was reloaded. Chrome
+    // does not retroactively run manifest content_scripts in an existing tab.
+    // Inject both POD bridge halves explicitly. Each has an installation guard,
+    // so this is safe for newly opened tabs and repeat checks too.
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "ISOLATED",
+        files: ["pod-checker/content.js"]
+      });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "MAIN",
+        files: ["pod-checker/page_bridge.js"]
+      });
+    } catch (injectionError) {
+      const detail = injectionError?.message || String(injectionError);
+      throw new Error(`Badoc Hub Extesion could not attach its SPX checker scripts to this tab: ${detail}. Check that the extension has site access to https://spx.shopee.ph, then reload SPX and try again.`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 180));
+
+    // Confirm the receiver exists before requesting SPA route readiness. This
+    // returns a targeted error instead of the generic Chrome messaging error.
     // First wait for the extension content script / page-world bridge to answer
     // a fast PING. Retry only connection-startup failures, never queue repeated
     // long WAIT_FMS_READY commands against the same page.
