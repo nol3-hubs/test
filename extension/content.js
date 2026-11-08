@@ -27,12 +27,12 @@
     /^(https?:)\/\/(localhost|127\.0\.0\.1)(?::\d+)?\//i.test(bridgeContextUrl) ||
     isGithubPagesHost(bridgeContextUrl);
   if (!isAllowedHost) return;
-  if (window.__badocSpxBridgeUnifiedV6938) return;
-  window.__badocSpxBridgeUnifiedV6938 = true;
+  if (window.__badocSpxBridgeUnifiedV6937) return;
+  window.__badocSpxBridgeUnifiedV6937 = true;
 
   const PAGE_SOURCE = "BADOC_SPX_BRIDGE";
   const BADOC_SOURCE = "BADOC_PAGE";
-  const VERSION = "69.3.8";
+  const VERSION = "69.3.7";
   let port = null;
   let reconnectTimer = null;
   let shuttingDown = false;
@@ -72,18 +72,6 @@
       return;
     }
 
-    if (data.type === "BADOC_GET_POD_CHECKER_URL") {
-      try {
-        emit("BADOC_POD_CHECKER_URL", {
-          url: chrome.runtime.getURL("pod-checker.html"),
-          version: VERSION
-        });
-      } catch (error) {
-        emit("BADOC_SPX_ERROR", { message: error?.message || String(error) });
-      }
-      return;
-    }
-
     if (data.type === "BADOC_OPEN_EXTENSIONS") {
       try {
         chrome.runtime.sendMessage({ type: "BADOC_OPEN_EXTENSIONS" }, response => {
@@ -117,7 +105,7 @@
         data.type === "BADOC_START_LINEHAUL_SYNC" ? "linehaul" :
         data.type === "BADOC_START_RIDER_SYNC" ? "rider" : "parcel-inbound";
       emit("BADOC_SPX_ERROR", {
-        message: "SPX BRIDGE v69.3.8 is not connected. Reload the extension and refresh BADOC HUB.",
+        message: "SPX BRIDGE v69.3.4 is not connected. Reload the extension and refresh BADOC HUB.",
         kind: errorKind
       });
       return;
