@@ -24,14 +24,23 @@ async function ensureSpxReady() {
   spxPreparePromise = (async () => {
     const overlay = $("spxLoading");
     overlay?.classList.add("show");
+    let timeoutId = null;
     try {
-      const response = await chrome.runtime.sendMessage({
-        target: "POD_CHECKER_BACKGROUND",
-        action: "OPEN_SPX_PORTAL"
-      });
+      const response = await Promise.race([
+        chrome.runtime.sendMessage({
+          target: "POD_CHECKER_BACKGROUND",
+          action: "OPEN_SPX_PORTAL"
+        }),
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error(
+            "SPX did not become ready within 45 seconds. Check that you are signed in to SPX, then click Check OIDs again."
+          )), 45000);
+        })
+      ]);
       if (!response?.ok) throw new Error(response?.error || "Chrome could not prepare the SPX Proof of On Hold page.");
       return response;
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       overlay?.classList.remove("show");
       spxPreparePromise = null;
     }
@@ -156,7 +165,7 @@ $('check').addEventListener("click",async()=>{
  saveOids().catch(error=>console.warn("POD Checker could not save the OID input yet:",error));
  try{
   setStatus(`Starting ${oids.length} OID check(s)…`);
-  setStatus("Preparing SPX Proof of On Hold in the background…");
+  setStatus("Opening SPX in the background and checking that the Proof of On Hold page is ready…");
   await ensureSpxReady();
   const tab=await getSpxTab();
   setStatus(`Connected to SPX in the background. Checking ${oids.length} OID(s) through the read-only Proof of On Hold endpoint…`);

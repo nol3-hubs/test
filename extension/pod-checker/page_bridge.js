@@ -952,33 +952,50 @@
     if (event.source !== window || !msg || msg.source !== COMMAND_SOURCE || !msg.requestId) return;
     let payload;
     try {
-      if (msg.command === "ARM") {
+      if (msg.command === "PING") {
+        payload = {
+          ok: true,
+          route: String(location.hash || ""),
+          title: String(document.title || ""),
+          bodyLength: String(document.body?.innerText || "").trim().length
+        };
+      } else if (msg.command === "ARM") {
         targetOids = Array.isArray(msg.data.oids) ? msg.data.oids.map(x=>String(x).trim()).filter(Boolean).slice(0,2000) : [];
         payload = {ok:true, message:`Capture armed for ${targetOids.length} OID(s). Open one of these exact OIDs in SPX, then open its Proof of On Hold tab and wait for the validation details to load.`};
       } else if (msg.command === "WAIT_FMS_READY") {
-        // FMS is a SPA: browser tab "complete" can happen before its data is ready.
-        // Wait for the target route, visible content, and a period of DOM quiet.
+        // SPX is a single-page app. Do not depend on a completely quiet DOM:
+        // menus, clocks, and background widgets can keep mutating indefinitely.
+        // Instead require the target route, meaningful page text, and stable
+        // visible text for a short period. The wait is deliberately bounded.
         const started = Date.now();
-        const minWaitMs = 5000;
-        const quietMs = 3000;
-        const maxWaitMs = 90000;
-        let lastMutation = Date.now();
-        const observer = new MutationObserver(() => { lastMutation = Date.now(); });
-        if (document.documentElement) observer.observe(document.documentElement, {subtree:true, childList:true, attributes:true, characterData:true});
-        try {
-          while (Date.now() - started < maxWaitMs) {
-            const routeReady = location.hash.includes("PROOF_OF_ONHOLD") || location.href.includes("PROOF_OF_ONHOLD");
-            const bodyText = (document.body?.innerText || "").trim();
-            const contentReady = bodyText.length > 120;
-            const elapsed = Date.now() - started;
-            if (routeReady && contentReady && elapsed >= minWaitMs && Date.now() - lastMutation >= quietMs) {
-              payload = {ok:true, ready:true, waitedMs:elapsed, message:"FMS page content appears loaded and stable."};
-              break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 500));
+        const minWaitMs = 3500;
+        const stableMs = 1800;
+        const maxWaitMs = 25000;
+        let previousText = "";
+        let textStableSince = Date.now();
+        while (Date.now() - started < maxWaitMs) {
+          const routeReady = location.hash.includes("PROOF_OF_ONHOLD") || location.href.includes("PROOF_OF_ONHOLD");
+          const bodyText = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+          const contentReady = bodyText.length > 120;
+          const now = Date.now();
+          if (bodyText !== previousText) {
+            previousText = bodyText;
+            textStableSince = now;
           }
-          if (!payload) throw new Error("FMS opened, but its page content did not become stable within 90 seconds. Please wait in FMS and try again.");
-        } finally { observer.disconnect(); }
+          const elapsed = now - started;
+          if (routeReady && contentReady && elapsed >= minWaitMs && now - textStableSince >= stableMs) {
+            payload = {ok:true, ready:true, waitedMs:elapsed, message:"SPX Proof of On Hold page is ready."};
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
+        if (!payload) {
+          const routeReady = location.hash.includes("PROOF_OF_ONHOLD") || location.href.includes("PROOF_OF_ONHOLD");
+          const bodyLength = String(document.body?.innerText || "").trim().length;
+          if (!routeReady) throw new Error("SPX did not reach the Proof of On Hold page. Check your SPX session and try again.");
+          if (bodyLength <= 120) throw new Error("SPX opened, but the Proof of On Hold page has not loaded its content. Check your SPX sign-in and try again.");
+          throw new Error("SPX is still updating the Proof of On Hold page. Wait a moment and click Check OIDs again.");
+        }
       } else if (msg.command === "LIST") {
         payload = {ok:true, captures: captures.slice(0,60).map(requestSummary)};
       } else if (msg.command === "REPLAY") {

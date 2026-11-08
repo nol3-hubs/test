@@ -19,7 +19,7 @@
         pending.delete(requestId);
         sendResponse({ok:false,error:"No response from the SPX page. Reload the SPX tab and try again."});
       }
-    }, msg.command === "WAIT_FMS_READY" ? 100000 : (msg.command === "REPLAY" ? 30000 : 5000));
+    }, msg.command === "WAIT_FMS_READY" ? 32000 : (msg.command === "REPLAY" ? 30000 : 5000));
     pending.set(requestId, payload => {
       clearTimeout(timer);
       sendResponse(payload);

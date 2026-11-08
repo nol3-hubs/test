@@ -2102,22 +2102,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (tabState.status !== "complete") throw new Error("SPX navigation timed out. The background tab is still loading.");
 
-    // SPX is a SPA. Wait for the Proof of On Hold route and its rendered content.
-    let readiness = null;
-    const readyDeadline = Date.now() + 95000;
-    let lastError = null;
-    while (Date.now() < readyDeadline) {
+    // First wait for the extension content script / page-world bridge to answer
+    // a fast PING. Retry only connection-startup failures, never queue repeated
+    // long WAIT_FMS_READY commands against the same page.
+    const bridgeDeadline = Date.now() + 12000;
+    let bridgePing = null;
+    let bridgeError = null;
+    while (Date.now() < bridgeDeadline) {
       try {
-        readiness = await chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "WAIT_FMS_READY" });
-        if (readiness?.ok) break;
-        lastError = new Error(readiness?.error || "SPX Proof of On Hold page is not ready yet.");
+        bridgePing = await chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "PING" });
+        if (bridgePing?.ok) break;
+        bridgeError = new Error(bridgePing?.error || "SPX page bridge did not answer its readiness ping.");
       } catch (error) {
-        lastError = error;
-        await new Promise(resolve => setTimeout(resolve, 900));
+        bridgeError = error;
       }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    if (!bridgePing?.ok) {
+      throw new Error(bridgeError?.message || "Badoc Hub Extesion could not connect to the SPX page. Reload the extension and try again.");
+    }
+
+    // SPX is a SPA. Ask once for bounded route/content readiness.
+    let readiness;
+    try {
+      readiness = await chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "WAIT_FMS_READY" });
+    } catch (error) {
+      throw new Error(error?.message || "SPX Proof of On Hold page did not respond. Reload SPX and try again.");
     }
     if (!readiness?.ok) {
-      throw new Error(lastError?.message || "SPX Proof of On Hold page did not finish loading. Check your SPX sign-in and try again.");
+      throw new Error(readiness?.error || "SPX Proof of On Hold page is not ready. Check your SPX sign-in and try again.");
     }
 
     sendResponse({
