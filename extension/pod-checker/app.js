@@ -8,22 +8,52 @@ let results = [];
 let captures = [];
 let currentPage = 1;
 const PAGE_SIZE = 100;
-// Safeguard: OIDs may only be pasted/checked after Open FMS completes in this app session.
-let fmsOpenedSuccessfully = false;
 function parseOids() {
   return [...new Set($('oids').value.split(/[\s,;]+/).map(s=>s.trim()).filter(Boolean))];
 }
 function setStatus(text,type="") {$('status').textContent=text;$('status').className="status "+type;}
 async function getSpxTab() {
-  let tabs = await chrome.tabs.query({url:"https://spx.shopee.ph/*",currentWindow:true});
-  if (!tabs.length) tabs = await chrome.tabs.query({url:"https://spx.shopee.ph/*"});
-  if (!tabs.length) throw new Error("SPX tab not found. Open SPX manually in an existing tab, sign in, then return to POD Checker.");
-  return tabs.find(t=>t.active) || tabs.sort((a,b)=>(b.lastAccessed||0)-(a.lastAccessed||0))[0];
+  const tabs = await chrome.tabs.query({url:"https://spx.shopee.ph/*"});
+  const proofTabs = tabs.filter(t => /PROOF_OF_ONHOLD/i.test(String(t.url||"")) && /proof_of_onhold/i.test(String(t.url||"")));
+  if (!proofTabs.length) throw new Error("SPX Proof of On Hold is not ready. Click Check OIDs to prepare it automatically.");
+  return proofTabs.sort((a,b)=>(b.lastAccessed||0)-(a.lastAccessed||0))[0];
+}
+let spxPreparePromise = null;
+async function ensureSpxReady() {
+  if (spxPreparePromise) return spxPreparePromise;
+  spxPreparePromise = (async () => {
+    const overlay = $("spxLoading");
+    overlay?.classList.add("show");
+    try {
+      const response = await chrome.runtime.sendMessage({
+        target: "POD_CHECKER_BACKGROUND",
+        action: "OPEN_SPX_PORTAL"
+      });
+      if (!response?.ok) throw new Error(response?.error || "Chrome could not prepare the SPX Proof of On Hold page.");
+      return response;
+    } finally {
+      overlay?.classList.remove("show");
+      spxPreparePromise = null;
+    }
+  })();
+  return spxPreparePromise;
 }
 async function pageCommand(command,data={}) {
-  const tab=await getSpxTab();
-  try {return await chrome.tabs.sendMessage(tab.id,{target:"pood-page",command,data});}
-  catch(e){throw new Error("Cannot connect to the SPX tab. Reload spx.shopee.ph, sign in, then try again.");}
+  let tab = await getSpxTab().catch(() => null);
+  if (!tab) {
+    await ensureSpxReady();
+    tab = await getSpxTab();
+  }
+  try {
+    return await chrome.tabs.sendMessage(tab.id,{target:"pood-page",command,data});
+  } catch (error) {
+    const message = String(error?.message || error || "");
+    if (!/no tab with id|receiving end does not exist|could not establish connection|no response from the spx page|cannot connect to the spx tab/i.test(message)) throw error;
+    // Recover once if SPX was closed or its content script was disconnected mid-run.
+    await ensureSpxReady();
+    tab = await getSpxTab();
+    return await chrome.tabs.sendMessage(tab.id,{target:"pood-page",command,data});
+  }
 }
 function esc(x){return String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function isDelivered(r){return /delivered/i.test(String(r?.deliveryStatus||""));}
@@ -110,49 +140,19 @@ function renderResults(){
    <td>${evidenceHtml(r)}</td>
   </tr>`).join(""):'<tr><td colspan="5" class="muted">No matching results.</td></tr>';
 }
-let oidToastTimer=null;
-function showOidToast(){
- const toast=$('oidToast'); if(!toast)return;
- toast.classList.add('show');
- clearTimeout(oidToastTimer);
- oidToastTimer=setTimeout(()=>toast.classList.remove('show'),7000);
-}
-$('closeOidToast')?.addEventListener('click',()=>{$('oidToast')?.classList.remove('show');clearTimeout(oidToastTimer);});
 async function refreshCaptures(){
  const r=await pageCommand("LIST");
  if(!r?.ok)throw new Error(r?.error||"Could not get captured requests.");
  captures=r.captures||[];renderCaptures();
 }
-$('openSpx').addEventListener("click", async () => {
- const button = $('openSpx');
- button.disabled = true;
- const oldLabel = button.textContent;
- button.textContent = "Loading SPX…";
- $('spxLoading').classList.add('show');
- try {
-  const response = await chrome.runtime.sendMessage({
-   target: "POD_CHECKER_BACKGROUND",
-   action: "OPEN_SPX_PORTAL"
-  });
-  if (!response?.ok) throw new Error(response?.error || "Chrome could not open the SPX Proof of On Hold page.");
-  fmsOpenedSuccessfully = true;
-  setStatus("FMS finished loading in the background. You can now paste and check OIDs.", "good");
-  showOidToast();
- } catch (error) {
-  setStatus(`Could not open the SPX portal: ${error?.message || String(error)}. Check that POD Checker is enabled and reload the extension.`, "error");
- } finally {
-  $('spxLoading').classList.remove('show');
-  button.disabled = false;
-  button.textContent = oldLabel;
- }
-});
 $('check').addEventListener("click",async()=>{
- if(!fmsOpenedSuccessfully){setStatus("Please click Open FMS and wait for it to finish loading before checking OIDs.","error");return;}
  const oids=parseOids();if(!oids.length){setStatus("Paste at least one OID first.","error");return;}
  await saveOids();$('check').disabled=true;results=[];renderResults();$('progressBar').style.width="0%";
  try{
+  setStatus("Preparing SPX Proof of On Hold in the background…");
+  await ensureSpxReady();
   const tab=await getSpxTab();
-  setStatus(`Connected to SPX tab. Checking ${oids.length} OID(s) through the read-only Proof of On Hold endpoint…`);
+  setStatus(`Connected to SPX in the background. Checking ${oids.length} OID(s) through the read-only Proof of On Hold endpoint…`);
   // Process up to 10 OIDs concurrently. Each OID requires the validation
   // request plus recipient_info, so this balances speed and portal stability.
   const concurrency=Math.min(10,oids.length);
@@ -202,9 +202,6 @@ $('copy').addEventListener("click",async()=>{
  if(!results.length){setStatus("No results to copy.");return;}
  const text=[["OID","Result","Reason","Status","Driver Name","POD evidence"].join("\t"),...results.map(r=>[r.oid,displayResult(r),r.checkReason,r.deliveryStatus,r.driverName,evidenceText(r)].map(v=>String(v??"").replace(/\t/g," ")).join("\t"))].join("\n");
  try{await navigator.clipboard.writeText(text);setStatus("Results copied to clipboard.","good");}catch(e){setStatus("Clipboard access denied. Export CSV instead.","error");}
-});
-$('oids').addEventListener("paste",event=>{
- if(!fmsOpenedSuccessfully){event.preventDefault();setStatus("Paste blocked. Please click Open FMS and wait for it to finish loading first.","error");}
 });
 $('oids').addEventListener("input",saveOids);
 ['filterResult','filterTier','filterStatus','filterDriver'].forEach(id=>$(id).addEventListener('change',()=>{currentPage=1;renderResults();}));
@@ -779,7 +776,5 @@ $("disconnectDashboard")?.addEventListener("click",async()=>{
 loadSaved().catch(error=>setStatus(`Extension connection required: ${error?.message||String(error)}`,"error"));
 /* Daily Ops Dashboard connection UI removed from the POD/POOH menu. */
 
-// Open the SPX ePOD Tier Guide in a separate tab.
-document.getElementById('tierGuide')?.addEventListener('click', () => window.open('https://docs.google.com/presentation/d/17NZW-6hoPXw71bYQ70Dcw79YYuEtl0YVAXUTnLLwHkQ/edit?slide=id.g2a12838c453_0_187', '_blank', 'noopener,noreferrer'));
 
 })();

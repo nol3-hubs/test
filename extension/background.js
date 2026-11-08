@@ -2065,47 +2065,81 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   (async () => {
     const proofOfOnHoldUrl = "https://spx.shopee.ph/#/orderDetail/PROOF_OF_ONHOLD/proof_of_onhold?originUrl=%2ForderTracking&module=am_hubDeliveryManagement&stationType=AM_HUB";
-    // Open SPX as a background tab so the user stays in POD Checker.
-    const tab = await chrome.tabs.create({
-      url: proofOfOnHoldUrl,
-      active: false
-    });
-    // Poll tab state instead of relying on a one-shot onUpdated listener (which can miss
-    // the complete event if it fires immediately after tabs.create).
+    const isProofPage = url => /PROOF_OF_ONHOLD/i.test(String(url || "")) && /proof_of_onhold/i.test(String(url || ""));
+
+    // Reuse a Proof of On Hold tab if it already exists. Otherwise reuse another
+    // SPX tab and route it to the required page. Create a background tab only
+    // when SPX is completely closed; never activate the tab or switch the user away.
+    const spxTabs = await chrome.tabs.query({ url: `${SPX_ORIGIN}/*` });
+    const preferredWindowId = sender?.tab?.windowId;
+    const sortTabs = (a, b) => {
+      const aSameWindow = a.windowId === preferredWindowId ? 1 : 0;
+      const bSameWindow = b.windowId === preferredWindowId ? 1 : 0;
+      if (aSameWindow !== bSameWindow) return bSameWindow - aSameWindow;
+      return (b.lastAccessed || 0) - (a.lastAccessed || 0);
+    };
+    const existingProofTabs = spxTabs.filter(tab => isProofPage(tab.url)).sort(sortTabs);
+    const otherSpxTabs = spxTabs.filter(tab => !isProofPage(tab.url)).sort(sortTabs);
+    let tab = existingProofTabs[0] || otherSpxTabs[0] || null;
+    let created = false;
+    let navigated = false;
+
+    if (!tab) {
+      tab = await chrome.tabs.create({ url: proofOfOnHoldUrl, active: false });
+      created = true;
+    } else if (!isProofPage(tab.url)) {
+      tab = await chrome.tabs.update(tab.id, { url: proofOfOnHoldUrl, active: false });
+      navigated = true;
+    }
+    if (!tab?.id) throw new Error("Chrome could not prepare an SPX tab.");
+
+    // Wait for navigation to finish without activating the background tab.
     const navDeadline = Date.now() + 60000;
     let tabState = await chrome.tabs.get(tab.id);
     while (tabState.status !== "complete" && Date.now() < navDeadline) {
       await new Promise(resolve => setTimeout(resolve, 300));
       tabState = await chrome.tabs.get(tab.id);
     }
-    if (tabState.status !== "complete") throw new Error("FMS navigation timed out. The tab is still loading.");
+    if (tabState.status !== "complete") throw new Error("SPX navigation timed out. The background tab is still loading.");
 
-    // Content-script handshake may be delayed while SPX initializes. Retry briefly,
-    // and put a hard deadline around the SPA readiness check to avoid a stuck overlay.
+    // SPX is a SPA. Wait for the Proof of On Hold route and its rendered content.
     let readiness = null;
-    const readyDeadline = Date.now() + 30000;
+    const readyDeadline = Date.now() + 95000;
     let lastError = null;
     while (Date.now() < readyDeadline) {
       try {
-        readiness = await Promise.race([
-          chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "WAIT_FMS_READY" }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("FMS readiness check timed out.")), 20000))
-        ]);
+        readiness = await chrome.tabs.sendMessage(tab.id, { target: "pood-page", command: "WAIT_FMS_READY" });
         if (readiness?.ok) break;
-        lastError = new Error(readiness?.error || "FMS page is not ready yet.");
-      } catch (error) { lastError = error; }
-      await new Promise(resolve => setTimeout(resolve, 1000));
+        lastError = new Error(readiness?.error || "SPX Proof of On Hold page is not ready yet.");
+      } catch (error) {
+        lastError = error;
+        await new Promise(resolve => setTimeout(resolve, 900));
+      }
     }
-    if (!readiness?.ok) throw new Error(lastError?.message || "FMS page readiness could not be confirmed. The tab opened; you can continue manually.");
-    sendResponse({ ok: true, created: true, loaded: true, pageReady: true, waitedMs: readiness.waitedMs, background: true, tabId: tab?.id, windowId: tab?.windowId, url: proofOfOnHoldUrl });
+    if (!readiness?.ok) {
+      throw new Error(lastError?.message || "SPX Proof of On Hold page did not finish loading. Check your SPX sign-in and try again.");
+    }
+
+    sendResponse({
+      ok: true,
+      created,
+      reused: !created,
+      navigated,
+      loaded: true,
+      pageReady: true,
+      waitedMs: readiness.waitedMs,
+      background: true,
+      tabId: tab.id,
+      windowId: tab.windowId,
+      url: proofOfOnHoldUrl
+    });
   })().catch(error => {
-    console.error("POD Checker could not open the SPX Proof of On Hold page:", error);
+    console.error("POD Checker could not prepare the SPX Proof of On Hold page:", error);
     sendResponse({ ok: false, error: error?.message || String(error) });
   });
 
   return true;
 });
-
 
 // Dashboard-hosted POD/POOH Checker RPC. The website UI never receives Chrome APIs
 // directly; its content-script bridge requests these tightly-scoped operations.
