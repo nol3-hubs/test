@@ -1,23 +1,23 @@
 {
   "id": "./",
-  "name": "Badoc Hub Parcel Dashboard",
-  "short_name": "Badoc Hub",
-  "description": "Badoc Hub parcel receiving dashboard with SPX Bridge sync.",
+  "name": "Bacarra Hub Parcel Dashboard",
+  "short_name": "Bacarra Hub",
+  "description": "Bacarra Hub parcel dashboard with SPX Bridge sync.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f5f7fb",
-  "theme_color": "#1683ff",
+  "theme_color": "#ee4d2d",
   "icons": [
     {
-      "src": "./icons/badoc-hub-spx-round-v3-192.png",
+      "src": "./icons/bacarra-hub-spx-round-v3-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./icons/badoc-hub-spx-round-v3-512.png",
+      "src": "./icons/bacarra-hub-spx-round-v3-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

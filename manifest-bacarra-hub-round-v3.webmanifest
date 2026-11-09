@@ -1,0 +1,26 @@
+{
+  "id": "./?bacarraHubInstall=v1",
+  "name": "Bacarra Hub Parcel Dashboard",
+  "short_name": "Bacarra Hub",
+  "description": "Bacarra Hub parcel dashboard with SPX Bridge sync.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f7fb",
+  "theme_color": "#ee4d2d",
+  "icons": [
+    {
+      "src": "./icons/bacarra-hub-spx-round-v3-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/bacarra-hub-spx-round-v3-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

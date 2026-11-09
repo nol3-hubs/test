@@ -1,11 +1,10 @@
-const CACHE_NAME = 'badoc-hub-pwa-app-v19-pod-receiver-channel-20261109';
+const CACHE_NAME = 'bacarra-hub-pwa-v21-badoc-ui-v20-bridge-v73';
 const APP_SHELL = [
   './index.html',
-  './manifest.webmanifest',
-  './icons/badoc-hub-spx-round-v3-192.png',
-  './icons/badoc-hub-spx-round-v3-512.png'
+  './manifest-bacarra-hub-round-v3.webmanifest',
+  './icons/bacarra-hub-spx-round-v3-192.png',
+  './icons/bacarra-hub-spx-round-v3-512.png'
 ];
-
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
@@ -13,21 +12,17 @@ self.addEventListener('install', event => {
     await self.skipWaiting();
   })());
 });
-
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(key => key.startsWith('badoc-hub-pwa-') && key !== CACHE_NAME).map(key => caches.delete(key)));
+    await Promise.all(keys.filter(key => key.startsWith('bacarra-hub-pwa-') && key !== CACHE_NAME).map(key => caches.delete(key)));
     await self.clients.claim();
   })());
 });
-
 self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
-  // Only cache the GitHub Pages app itself. SPX/API requests are left untouched.
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
@@ -41,8 +36,6 @@ self.addEventListener('fetch', event => {
     })());
     return;
   }
-
-  // App-shell assets are cache-first for quick loads, with network fallback.
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     const cached = await cache.match(request);
@@ -51,8 +44,6 @@ self.addEventListener('fetch', event => {
       const response = await fetch(request);
       if (response && response.ok) await cache.put(request, response.clone());
       return response;
-    } catch (_) {
-      return Response.error();
-    }
+    } catch (_) { return Response.error(); }
   })());
 });

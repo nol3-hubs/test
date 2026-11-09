@@ -1,0 +1,31 @@
+{
+  "BACARRA_TOWNS": 44,
+  "VINTAR_TOWNS": 19,
+  "PASUQUIN_CORE_TOWNS": 32,
+  "MB_TOWNS": [
+    "Cabayo",
+    "Esperanza",
+    "Cabangaran",
+    "Canaam",
+    "Isic Isic",
+    "Bayog",
+    "Bago",
+    "Mabanbanag",
+    "San Jose (Lipay)",
+    "Paayas",
+    "Dagupan",
+    "Namoroc",
+    "Bulbulala",
+    "Dipilat",
+    "Ester",
+    "Tamdagan",
+    "Visaya",
+    "Bobon",
+    "Davila"
+  ],
+  "PASUQUIN_CLASSIFICATION_TOTAL": 51,
+  "TOTAL_UNIQUE_TOWN_NAMES": 114,
+  "ZONE_ID_VALIDATION": "disabled",
+  "MB_TOWNS_DISPLAY_SECTION": "MB TOWNS",
+  "MB_TOWNS_PARCEL_AREA": "PASUQUIN"
+}

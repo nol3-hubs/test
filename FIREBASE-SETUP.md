@@ -1,19 +1,22 @@
-# Badoc Hub — Firebase setup
+# Bacarra Hub — Firebase setup
 
-The app points at your Realtime Database:
-`https://badoc-hub-dashboard-default-rtdb.asia-southeast1.firebasedatabase.app`
+Bacarra Hub syncs through Firebase Realtime Database (data under /bacarra). The databaseURL is already set in index.html.
 
-1. **Rules** — Firebase console → Realtime Database → Rules → paste, then Publish:
+1. Firebase console → create a project → Build → **Realtime Database** → Create database.
+2. **Rules** → paste and Publish:
 
        {
          "rules": {
            ".read": false,
            ".write": false,
-           "badoc": { ".read": true, ".write": true }
+           "bacarra": { ".read": true, ".write": true }
          }
        }
 
-2. **Optional** — paste `apiKey` / `appId` into `BADOC_FIREBASE_CONFIG` in `index.html`.
-   Sync works with `databaseURL` alone.
+   (If you share a project with Badoc Hub, keep its `"badoc"` rule too.)
+3. Project settings → Your apps → Web app → copy the config into `window.BADOC_FIREBASE_CONFIG`
+   near the top of `index.html`. `databaseURL` alone is enough; `apiKey`/`appId` are optional.
+4. Open the hub → Settings → **Test Cloud Connection**.
 
-3. Open the hub from your GitHub link → Settings → *Test Cloud Connection*.
+Existing Supabase data is not migrated automatically: after switching, re-upload the Parcel Count / Riders / Linehaul
+files once (or use the extension's Sync All) and the shared state is rebuilt in Firebase.
