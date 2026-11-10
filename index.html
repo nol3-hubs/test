@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v21">
+<meta name="badoc-app-version" content="v22">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -736,7 +736,7 @@ window.DASHBOARD_V2 = {
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v21</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v22</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -1270,7 +1270,7 @@ UPLOAD TO PARCEL COUNT</div>
   
 </div>
 <div class="section">
-    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v21</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
+    <h2>Settings</h2><div class="app-version-setting" aria-label="Application version"><strong>Badoc Hub Application Version</strong><span>Use this number to identify the dashboard build installed on this device.</span><b>v22</b></div><div class="toolbar"><span id="backup" style="display:none"></span><span id="restoreBtn" style="display:none"></span><input id="restoreFile" type="file" accept=".json" style="display:none"><button class="btn" id="resetClearFloorRate" type="button">Reset Clear Floor Rate</button><button class="btn danger" id="resetCfr1" type="button">Reset CFR1</button><button class="btn danger" id="clearData">Clear all data</button></div>
     <div class="hint">Reset Clear Floor Rate affects only today's peak. Reset CFR1 rebuilds today's CFR1 eligible-parcel list and 7:00 AM count freeze from the currently available parcel data; it does not delete uploads, change other KPIs, or reset town settings.</div><div id="cfr1CloudSyncStatus" style="margin-top:6px;font-size:11px;color:var(--muted)">CFR1 cloud sync initializes when cloud storage is available.</div>
   </div></section>
 <section id="receivedChecking" class="page received-checking-page" aria-label="Dispatch">
@@ -1637,36 +1637,116 @@ async function importParcelCsvText(text,fileName="export_forward_order.csv",sour
 
 const EXCEPTION_TN_KEY="badoc_exception_tracking_numbers_v1";
 
-/* Optional cloud exemption sync. Core dashboard/CFR1 logic is untouched. */
-const EXEMPTION_SYNC_URL="https://script.google.com/macros/s/AKfycbwjiSFc0cAiYwXgYhj5syKfYzKH6q7ISHab_wJ-x0p81VeFI5NpknF7kgIJhv9hdTTclg/exec";
+/* Shared cloud exemption sync through the same Firebase-backed BadocCloud
+   adapter used by the dashboard. This avoids cross-origin Apps Script fetch
+   failures and keeps exemption data in the hub's existing shared cloud. */
+const EXEMPTION_CLOUD_TABLE="badoc_exemption_state";
+const EXEMPTION_CLOUD_ID="current";
+const EXEMPTION_CLOUD_LOCK="badoc-exemption-state-v1";
+let exemptionCloudClient=null;
+let exemptionCloudQueue=Promise.resolve();
+function getExemptionCloudClient(){
+  if(exemptionCloudClient)return exemptionCloudClient;
+  const cfg=window.BADOC_SHARED_CONFIG||{};
+  if(!window.BadocCloud||!cfg.url||!cfg.key)throw new Error("Badoc shared cloud is not ready");
+  exemptionCloudClient=window.BadocCloud.createClient(cfg.url,cfg.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+  return exemptionCloudClient;
+}
+function uniqueExceptionItems(items){
+  const out=[],seen=new Set();
+  (Array.isArray(items)?items:[]).forEach(value=>{
+    const text=String(value??"").trim(),key=exceptionKey(text);
+    if(text&&key&&!seen.has(key)){seen.add(key);out.push(text)}
+  });
+  return out;
+}
+function exemptionCloudOwner(){
+  try{
+    let id=sessionStorage.getItem("badoc_exemption_cloud_owner_v1");
+    if(!id){id="ex-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10);sessionStorage.setItem("badoc_exemption_cloud_owner_v1",id)}
+    return id;
+  }catch(e){return "ex-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10)}
+}
+async function withExemptionCloudLock(task){
+  const cloud=window.BadocCloud;
+  const owner=exemptionCloudOwner();
+  let acquired=false;
+  if(cloud&&typeof cloud.claim==="function"){
+    for(let i=0;i<28;i++){
+      try{acquired=await cloud.claim(EXEMPTION_CLOUD_LOCK,owner,12000)}catch(e){throw new Error("Could not acquire cloud exemption lock: "+String(e?.message||e))}
+      if(acquired)break;
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }
+    if(!acquired)throw new Error("Cloud exemption sync is busy on another device. It will retry on the next update.");
+  }
+  return await task();
+}
+function queueExemptionCloud(task){
+  const run=exemptionCloudQueue.then(task,task);
+  exemptionCloudQueue=run.catch(error=>{
+    console.warn("Cloud exemption sync failed",error);
+    return false;
+  });
+  return exemptionCloudQueue;
+}
+async function readCloudExemptionItems(client){
+  const result=await client.from(EXEMPTION_CLOUD_TABLE).select("*").eq("id",EXEMPTION_CLOUD_ID).maybeSingle();
+  if(result.error)throw new Error(result.error.message||"Cloud exemption read failed");
+  if(!result.data)return null;
+  return uniqueExceptionItems(result.data.items);
+}
+async function writeCloudExemptionItems(client,items){
+  const payload={id:EXEMPTION_CLOUD_ID,items:uniqueExceptionItems(items),updatedAt:new Date().toISOString(),updatedBy:exemptionCloudOwner()};
+  const result=await client.from(EXEMPTION_CLOUD_TABLE).upsert(payload,{onConflict:"id"});
+  if(result.error)throw new Error(result.error.message||"Cloud exemption save failed");
+  return payload.items;
+}
 
 async function syncExceptionsFromCloud(){
-  const url=String(EXEMPTION_SYNC_URL||"").trim();
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/i.test(url))return false;
-  try{
-    const r=await fetch(url+"?action=list&_="+Date.now(),{cache:"no-store"});
-    if(!r.ok)return false;
-    const data=await r.json();
-    if(!data || data.ok!==true || !Array.isArray(data.items))return false;
-    const incoming=[...new Set(data.items.map(x=>String(x||"").trim()).filter(Boolean))];
-    exceptionTrackingNumbers=incoming;
-    try{localStorage.setItem(EXCEPTION_TN_KEY,JSON.stringify(incoming))}catch(e){}
+  return queueExemptionCloud(()=>withExemptionCloudLock(async()=>{
+    const client=getExemptionCloudClient();
+    const remote=await readCloudExemptionItems(client);
+    if(remote===null){
+      // First migration to the shared cloud: seed it from this device's saved list.
+      const seeded=await writeCloudExemptionItems(client,exceptionTrackingNumbers);
+      exceptionTrackingNumbers=seeded;
+    }else{
+      // The shared record is authoritative after it has been initialized.
+      exceptionTrackingNumbers=remote;
+    }
+    saveExceptionTrackingNumbers();
     renderExceptionTracking();
     render();
     syncExemptionsToReceivedChecking();
     if(typeof window.updateOperationProgress==="function")window.updateOperationProgress();
     if(typeof updateRecordExportButton==="function")updateRecordExportButton();
     return true;
-  }catch(e){console.warn("Cloud exemption sync failed",e);return false}
+  }));
 }
 
 function cloudExceptionWrite(action,value){
-  const url=String(EXEMPTION_SYNC_URL||"").trim();
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/i.test(url))return;
-  try{
-    const body=new URLSearchParams({action:String(action),value:String(value||"")});
-    fetch(url,{method:"POST",mode:"no-cors",body,keepalive:true}).catch(()=>{});
-  }catch(e){}
+  const op=String(action||"").toLowerCase();
+  const raw=String(value||"").trim();
+  return queueExemptionCloud(()=>withExemptionCloudLock(async()=>{
+    const client=getExemptionCloudClient();
+    const remote=await readCloudExemptionItems(client);
+    // Merge any unsynced local items with the latest shared list, then apply
+    // the requested operation. Remove/clear actions are applied AFTER merge.
+    let items=uniqueExceptionItems([...(remote||[]),...exceptionTrackingNumbers]);
+    const key=exceptionKey(raw);
+    if(op==="add"&&raw&&key&&!items.some(x=>exceptionKey(x)===key))items.push(norm(raw));
+    else if(op==="remove"&&key)items=items.filter(x=>exceptionKey(x)!==key);
+    else if(op==="clear")items=[];
+    items=await writeCloudExemptionItems(client,items);
+    exceptionTrackingNumbers=items;
+    saveExceptionTrackingNumbers();
+    renderExceptionTracking();
+    render();
+    syncExemptionsToReceivedChecking();
+    if(typeof window.updateOperationProgress==="function")window.updateOperationProgress();
+    if(typeof updateRecordExportButton==="function")updateRecordExportButton();
+    return true;
+  }));
 }
 
 function syncExemptionsToReceivedChecking(){
@@ -1678,10 +1758,10 @@ window.addEventListener("message",event=>{
   if(!frame||event.source!==frame.contentWindow)return;
   const d=event.data;
   if(!d||d.type!=="badoc-exemptions-updated"||!Array.isArray(d.items))return;
-  const incoming=[...new Set(d.items.map(x=>String(x||"").trim()).filter(Boolean))];
+  const incoming=uniqueExceptionItems(d.items);
   const before=exceptionTrackingNumbers.slice();
   const keySet=arr=>new Set(arr.map(exceptionKey).filter(Boolean));
-  const beforeKeys=keySet(before), incomingKeys=keySet(incoming);
+  const beforeKeys=keySet(before),incomingKeys=keySet(incoming);
   exceptionTrackingNumbers=incoming;
   saveExceptionTrackingNumbers();
   before.forEach(x=>{if(!incomingKeys.has(exceptionKey(x)))cloudExceptionWrite("remove",x)});
@@ -1700,7 +1780,7 @@ function exceptionKey(v){return norm(v).replace(/[\s\-_.]/g,"")}
 function loadExceptionTrackingNumbers(){
   try{
     const saved=JSON.parse(localStorage.getItem(EXCEPTION_TN_KEY)||"[]");
-    exceptionTrackingNumbers=Array.isArray(saved)?[...new Set(saved.map(x=>String(x||"").trim()).filter(Boolean))]:[];
+    exceptionTrackingNumbers=uniqueExceptionItems(saved);
   }catch(e){exceptionTrackingNumbers=[]}
 }
 function saveExceptionTrackingNumbers(){
@@ -1752,7 +1832,7 @@ function clearExceptionTrackingNumbers(){
 }
 loadExceptionTrackingNumbers();
 setTimeout(syncExemptionsToReceivedChecking,0);
-setTimeout(()=>{if(EXEMPTION_SYNC_URL && EXEMPTION_SYNC_URL.indexOf("PASTE_")!==0)syncExceptionsFromCloud();},250);
+setTimeout(()=>syncExceptionsFromCloud(),500);
 function mergeRowsUnique(rows){
   const map=new Map();
   for(const r of rows){
@@ -8351,7 +8431,7 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       if(typeof exceptionTrackingNumbers!=="undefined"){
         exceptionTrackingNumbers=[];
         if(typeof saveExceptionTrackingNumbers==="function")saveExceptionTrackingNumbers();
-        if(typeof cloudExceptionWrite==="function")cloudExceptionWrite("clear","");
+        if(typeof cloudExceptionWrite==="function")await cloudExceptionWrite("clear","");
         if(typeof renderExceptionTracking==="function")renderExceptionTracking();
       }
     }catch(e){console.warn("2 AM exception reset:",e)}
@@ -8377,8 +8457,9 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
         // working data is still present, capture it before returning.
         try{
           const operationalDate=dayKey(new Date(now.getFullYear(),now.getMonth(),now.getDate()-1,12));
-          const existing=await loadSnapshot(operationalDate);
-          if(!existing && typeof window.__badocCaptureDailyHistory==="function" && Array.isArray(current?.valid) && current.valid.length){
+          const snapshotLoader=window.__badocLoadDailyHistorySnapshot;
+          const existing=typeof snapshotLoader==="function"?await snapshotLoader(operationalDate):null;
+          if(snapshotLoader && !existing && typeof window.__badocCaptureDailyHistory==="function" && Array.isArray(current?.valid) && current.valid.length){
             await window.__badocCaptureDailyHistory("pre-reset-recovery",operationalDate);
           }
         }catch(e){console.warn("Daily History reset-marker recovery:",e)}
@@ -9285,6 +9366,10 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     }
     return JSON.parse(await r.data.text());
   }
+  // Public read-only bridge for the separate 2 AM reset IIFE. The function
+  // lives inside this module, so reset recovery must not call loadSnapshot by
+  // its private name from another script scope.
+  window.__badocLoadDailyHistorySnapshot=loadSnapshot;
 
     // ───────── Daily History UI (v7) ─────────
   const ui={tab:"riders",area:"all",q:"",below:false,sort:"pos",cfr:"unscanned",open:new Set()};
