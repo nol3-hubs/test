@@ -4,7 +4,7 @@
 <meta name="badoc-main-app" content="v2">
 <meta name="badoc-app-version" content="v46">
 
-<script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+<script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -793,17 +793,19 @@ window.DASHBOARD_V2 = {
 .parcel-status-sync-status{font-size:11px;color:var(--muted,#718096);min-height:16px}
 @media(max-width:700px){.first-mile-grid{grid-template-columns:1fr}.parcel-status-sync-buttons{grid-template-columns:1fr}}
 </style>
+
 <style id="first-mile-validation-dark-layout">
+/* First Mile redesign: dark operational console inspired by the supplied reference */
 html[data-theme="dark"] #firstMile.page{color:#e7f0fb}
 #firstMile .section{background:transparent!important;border:0!important;box-shadow:none!important;padding:14px!important}
 #firstMile .area-head{align-items:center;margin:0 0 16px;padding:0 2px}
-#firstMile .area-head h2{font-size:22px!important}
+#firstMile .area-head h2{font-size:22px!important;letter-spacing:.01em}
 #firstMile .area-head .hint{color:#8ea4bb!important}
 #firstMile .first-mile-card{max-width:none!important;margin:0 0 16px!important;background:linear-gradient(145deg,#10243a,#0b192b)!important;border:1px solid #233b55!important;border-radius:16px!important;color:#e7f0fb!important;box-shadow:0 12px 28px #02081255!important;padding:18px!important}
 #firstMile .first-mile-card p{color:#9fb3c8!important}
-#firstMile #syncFirstMileAll{min-height:46px;border-radius:10px!important;background:linear-gradient(100deg,#00bfae,#008e9e)!important;color:#fff!important;font-weight:800}
+#firstMile #syncFirstMileAll{min-height:46px;border-radius:10px!important;background:linear-gradient(100deg,#00bfae,#008e9e)!important;color:#fff!important;font-weight:800;box-shadow:0 8px 22px #00bfae25!important}
 #firstMile .first-mile-result{background:#0a1727!important;border:1px solid #20364e!important;color:#b9cce0!important}
-#firstMile .first-mile-flow{max-width:none!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px!important}
+#firstMile .first-mile-flow{max-width:none!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px!important;align-items:stretch}
 #firstMile .first-mile-flow-card{min-width:0;border-radius:16px!important;padding:18px!important;text-align:left!important;background:#0e2034!important;border:1px solid #203a56!important;color:#e7f0fb!important;box-shadow:0 10px 24px #02081244!important}
 #firstMile .first-mile-flow-card.orders{background:linear-gradient(145deg,#10233a,#0b192b)!important;border-left:4px solid #3b9cff!important}
 #firstMile .first-mile-flow-card.tasks{background:linear-gradient(145deg,#102b2c,#0a2024)!important;border-left:4px solid #00c6a2!important}
@@ -813,10 +815,14 @@ html[data-theme="dark"] #firstMile.page{color:#e7f0fb}
 #firstMile .first-mile-filters span{background:#172c43!important;color:#c4d6e8!important;border:1px solid #28425d!important}
 #firstMile .first-mile-flow-card .hint{color:#9db4ca!important}
 #firstMile .first-mile-flow-card .btn{background:#102b43!important;color:#dcecff!important;border:1px solid #31516f!important;border-radius:9px!important}
-#firstMile .first-mile-flow-arrow{grid-column:1/-1;color:#6e89a5!important}
+#firstMile .first-mile-flow-arrow{grid-column:1/-1;color:#6e89a5!important;gap:0!important}
+#firstMile .first-mile-flow-arrow span{font-size:22px!important}
+#firstMile .first-mile-flow-arrow small{font-size:11px!important}
 #firstMile .first-mile-local-note{color:#8098b1!important}
 @media(max-width:700px){#firstMile .first-mile-flow{grid-template-columns:1fr!important}#firstMile .first-mile-flow-card.dashboard{grid-column:auto}}
-</style></head>
+</style>
+
+</head>
 <body data-app-version="21">
 
 <div class="app">
@@ -1020,7 +1026,8 @@ html[data-theme="dark"] #firstMile.page{color:#e7f0fb}
 </section>
 
 <section id="dashboard" class="page">
-    <div class="hint" style="padding:7px 10px;margin-bottom:8px;border-radius:8px;background:rgba(234,179,8,.08);border:1px solid rgba(217,164,65,.35)">LOCAL-ONLY MODE · Cloud sync disabled · Data stays in this browser/device.</div>    <div class="parcel-source-row">
+    <div class="hint" style="padding:7px 10px;margin-bottom:8px;border-radius:8px;background:rgba(234,179,8,.08);border:1px solid rgba(217,164,65,.35)">LOCAL-ONLY MODE · Cloud sync disabled · Data stays in this browser/device.</div>
+    <div class="parcel-source-row">
       <div class="section upload-section parcel-upload-inline">
         <div class="upload-label">DATA SOURCE</div>
         <div class="uploadbox upload-drop" id="uploadDrop">
@@ -2019,7 +2026,8 @@ async function syncExceptionsFromCloud(options={}){
       record=await withExemptionCloudLock(async()=>{
         const latest=await readCloudExemptionRecord(client);
         if(latest)return latest;
-        return await writeCloudExemptionItems(client,exceptionTrackingNumbers,"initial-seed");      });
+        return await writeCloudExemptionItems(client,exceptionTrackingNumbers,"initial-seed");
+      });
     }
     applyCloudExemptionRecord(record,"initial/poll");
     startExemptionRealtimeSync();
@@ -3018,7 +3026,8 @@ function getParcelCountRows(){
     const key=Object.keys(r||{}).find(k=>/parcel\s*status\s*to|status\s*to|to\s*status/i.test(k));
     return key?String(r[key]??"").trim():"";
   };
-  const statusNorm=v=>norm(v).replace(/[_-]+/g," ").replace(/\s+/g," ");  const allowedStatuses=new Set([
+  const statusNorm=v=>norm(v).replace(/[_-]+/g," ").replace(/\s+/g," ");
+  const allowedStatuses=new Set([
     "RECEIVED","LMHUB RECEIVED","DELIVERING","DELIVERED",
     "ONHOLD","ON HOLD","LMHUB ONHOLD","LMHUB ON HOLD",
     "ASSIGNING","ASSIGNED","LMHUB ASSIGNING","LMHUB ASSIGNED"
@@ -4017,7 +4026,8 @@ if(recordSearchEl){
 });
 $("clearRecordFilters").onclick=async()=>{
   sharedFilterLocalEditSeq++;
-  sharedFilterLastLocalEditAt=Date.now();  if(parcelRecordFilterTimer){clearTimeout(parcelRecordFilterTimer);parcelRecordFilterTimer=null;}
+  sharedFilterLastLocalEditAt=Date.now();
+  if(parcelRecordFilterTimer){clearTimeout(parcelRecordFilterTimer);parcelRecordFilterTimer=null;}
   if(parcelRecordFilterFrame){cancelAnimationFrame(parcelRecordFilterFrame);parcelRecordFilterFrame=null;}
   if(sharedFilterSyncTimer){clearTimeout(sharedFilterSyncTimer);sharedFilterSyncTimer=null;}
   $("recordSearch").value="";
@@ -5016,7 +5026,8 @@ function renderLinehaulCore(){
     const checkedCount=activeArrivalTasks.filter(t=>t.arrivingInTime===true).length;
     allArrivalBox.checked=activeArrivalTasks.length>0&&checkedCount===activeArrivalTasks.length;
     allArrivalBox.indeterminate=checkedCount>0&&checkedCount<activeArrivalTasks.length;
-    if(!allArrivalBox.dataset.bound){      allArrivalBox.dataset.bound="1";
+    if(!allArrivalBox.dataset.bound){
+      allArrivalBox.dataset.bound="1";
       allArrivalBox.addEventListener("change",()=>{
         const tasks=(Array.isArray(linehaulTasks)?linehaulTasks:[]).filter(t=>t&&!t.blank&&!t.cleared&&String(t.id||"").trim());
         tasks.forEach(t=>{t.arrivingInTime=allArrivalBox.checked;});
@@ -6015,7 +6026,8 @@ window.DASHBOARD_V2_READY = true;
     }catch(e){
       console.warn("CFR1 cloud sync failed:",e);
       const status=document.getElementById("cfr1CloudSyncStatus");
-      if(status)status.textContent="CFR1 cloud sync failed — cloud not updated";    }finally{busy=false}
+      if(status)status.textContent="CFR1 cloud sync failed — cloud not updated";
+    }finally{busy=false}
   }
   async function poll(){
     if(busy)return;
@@ -7014,7 +7026,8 @@ if ("serviceWorker" in navigator) {
 
 try{
   const initSharedFilterSync=()=>setTimeout(startSharedFilterSync,1200);
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initSharedFilterSync,{once:true});  else initSharedFilterSync();
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initSharedFilterSync,{once:true});
+  else initSharedFilterSync();
 }catch(e){console.warn("Filter sync init:",e)}
 
 try{const initSharedFilterSync=()=>setTimeout(startSharedFilterSync,1200);if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initSharedFilterSync,{once:true});else initSharedFilterSync();}catch(e){console.warn("Filter sync init:",e)}
@@ -8013,7 +8026,8 @@ __badocEvery(()=>window.updateOperationProgress?.(),30000);
 
 <script id="daily-data-menu-runtime">
 (function(){
-  if(window.__badocDailyDataMenu)return;  window.__badocDailyDataMenu=true;
+  if(window.__badocDailyDataMenu)return;
+  window.__badocDailyDataMenu=true;
 
   function init(){
     var nav=document.getElementById("dailyDataNav");
@@ -9012,7 +9026,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
       if(window.__badocCfr1CloudSync && typeof window.__badocCfr1CloudSync.resetCloud==="function"){
         await window.__badocCfr1CloudSync.resetCloud();
       }
-      // CFR1 remains cloud-only; clear this device's in-memory copy too.      window.__badocCfr1LedgerMemory=null;
+      // CFR1 remains cloud-only; clear this device's in-memory copy too.
+      window.__badocCfr1LedgerMemory=null;
       await clearLocalWorkingData();
       // Marker is written LAST, so a failed reset will be retried.
       try{
@@ -10011,7 +10026,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   async function show(date,force){
     date=isDate(date)?date:todayDate();
     const changed=date!==curDate;curDate=date;setInput(date);
-    const seq=++loadSeq;    try{
+    const seq=++loadSeq;
+    try{
       if(date===todayDate()){renderSnapshot(buildSnapshot(date),date);return}
       let s=!force&&snapCache.get(date);
       if(!s){
@@ -11010,7 +11026,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
     bridgePreflightPromise=(async()=>{
       if(bridgeReady())return true;
       const ensure=window.__badocEnsureSpxBridge;
-      if(typeof ensure!=="function")return false;      try{return !!(await ensure());}
+      if(typeof ensure!=="function")return false;
+      try{return !!(await ensure());}
       catch(error){console.warn("Sync All bridge handshake failed:",error);return false;}
     })();
     return bridgePreflightPromise;
