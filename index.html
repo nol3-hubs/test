@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v55">
+<meta name="badoc-app-version" content="v56">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -5840,7 +5840,7 @@ function armBadocBridgeCommandWatchdog(kind){
     if(kind==="parcel-inbound" && BADOC_INBOUND_SYNC_BUTTON_IDS.some(id=>$(id)?.dataset.busy==="1")){
       clearBadocSyncWatchdog("inbound");
       setBadocInboundSyncButtonsBusy(false);
-      const message="The extension did not acknowledge the Received sync request. Check that the updated Badoc Hub extension is enabled, then reload the extension and this dashboard.";
+      const message="The Received sync command reached the extension page bridge, but the background service worker did not start the export. Open the extension's service worker console for errors, then reload the extension.";
       setParcelInboundSpxSyncStatus(message,"error");
       window.__badocOperationModalFinish?.("SPX Sync Request Not Received",message,[],"error");
     }
@@ -6065,7 +6065,11 @@ window.addEventListener("message",async event=>{
   }
 
   if(data.type==="BADOC_SPX_COMMAND_FORWARDED" && data.kind==="parcel-inbound"){
-    setParcelInboundSpxSyncStatus(data.message||"Received sync command forwarded to extension background; waiting for SPX export startup…","working");
+    // The page bridge has delivered the command to the extension port.
+    // Switch from the page-to-extension watchdog to the background-start watchdog.
+    clearBadocBridgeCommandWatchdog("parcel-inbound");
+    setParcelInboundSpxSyncStatus("Received sync command forwarded. Waiting for SPX background to start the export…","working");
+    armBadocBridgeCommandWatchdog("parcel-inbound");
     return;
   }
 
@@ -6078,7 +6082,10 @@ window.addEventListener("message",async event=>{
   if(data.type==="BADOC_SPX_PROGRESS"){
     const phase=String(data.phase||"");
     const kind=String(data.kind||"");
-    if(kind==="parcel-inbound" || phase.startsWith("parcel-") && !phase.startsWith("parcel-delivery"))armBadocSyncWatchdog("inbound");
+    if(kind==="parcel-inbound" || phase.startsWith("parcel-") && !phase.startsWith("parcel-delivery")){
+      clearBadocBridgeCommandWatchdog("parcel-inbound");
+      armBadocSyncWatchdog("inbound");
+    }
     else if(kind==="parcel-delivery" || phase.startsWith("parcel-delivery"))armBadocSyncWatchdog("delivery",data.trackingStatus||badocActiveDeliveryStatus);
     else armBadocSyncWatchdog("linehaul");
     if(kind==="first-mile-orders" || kind==="first-mile-tasks" || phase.startsWith("first-mile")){
