@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v56">
+<meta name="badoc-app-version" content="v57">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -3980,6 +3980,11 @@ $("riderPerformanceSearch")?.addEventListener("input",renderRiderPerformance);
     if(btn){btn.disabled=false;btn.dataset.busy="0";}
     $("firstMileOverallStatus").textContent=success?"First Mile sync completed · Orders and Tasks saved locally.":`First Mile sync stopped: ${message||"export failed"}`;
   };
+  window.__badocFailFirstMileSequence=function(message){
+    const kind=firstMileNextStep==="tasks"?"tasks":"orders";
+    window.__badocFirstMileSequenceResult?.(kind,false,message||"First Mile sync failed.");
+    const btn=$("syncFirstMileAll");if(btn){btn.disabled=false;btn.dataset.busy="0";}
+  };
   $("syncFirstMileAll")?.addEventListener("click",startFirstMileSync);
   function download(kind){
     const orders=kind==="orders";
@@ -5841,10 +5846,30 @@ function armBadocBridgeCommandWatchdog(kind){
       clearBadocSyncWatchdog("inbound");
       setBadocInboundSyncButtonsBusy(false);
       const message="The Received sync command reached the extension page bridge, but the background service worker did not start the export. Open the extension's service worker console for errors, then reload the extension.";
-      setParcelInboundSpxSyncStatus(message,"error");
+      setParcelInboundSyncStatus(message,"error");
       window.__badocOperationModalFinish?.("SPX Sync Request Not Received",message,[],"error");
+    }else if((kind==="first-mile-orders"||kind==="first-mile-tasks") && $("syncFirstMileAll")?.dataset.busy==="1"){
+      const message="The First Mile command reached the extension page bridge, but the background service worker did not acknowledge it. Reload the extension and retry.";
+      window.__badocFailFirstMileSequence?.(message);
+      window.__badocOperationModalFinish?.("First Mile Sync Not Started",message,[],"error");
     }
   },12000);
+}
+const BADOC_FIRST_MILE_PROGRESS_TIMERS=Object.create(null);
+function clearBadocFirstMileProgressWatchdog(kind){
+  if(BADOC_FIRST_MILE_PROGRESS_TIMERS[kind])clearTimeout(BADOC_FIRST_MILE_PROGRESS_TIMERS[kind]);
+  delete BADOC_FIRST_MILE_PROGRESS_TIMERS[kind];
+}
+function armBadocFirstMileProgressWatchdog(kind){
+  clearBadocFirstMileProgressWatchdog(kind);
+  BADOC_FIRST_MILE_PROGRESS_TIMERS[kind]=setTimeout(()=>{
+    clearBadocFirstMileProgressWatchdog(kind);
+    if($("syncFirstMileAll")?.dataset.busy!=="1")return;
+    const label=kind==="first-mile-orders"?"Orders":"Tasks";
+    const message="First Mile "+label+" export stopped reporting progress for 90 seconds. Check the SPX extension service worker console and retry.";
+    window.__badocFailFirstMileSequence?.(message);
+    window.__badocOperationModalFinish?.("First Mile Sync Timed Out",message,[],"error");
+  },90000);
 }
 
 function setDeliveringBatchReconcileStatus(message,state=""){
@@ -6039,6 +6064,8 @@ window.addEventListener("message",async event=>{
     const deliveryBusy=!!badocActiveDeliveryStatus;
     const linehaulBtn=$("syncLinehaulFromSPX");
     const linehaulBusy=linehaulBtn?.dataset.busy==="1";
+    const firstMileBtn=$("syncFirstMileAll");
+    const firstMileBusy=firstMileBtn?.dataset.busy==="1";
     if(inboundBusy){
       clearBadocBridgeCommandWatchdog("parcel-inbound");
       clearBadocSyncWatchdog("inbound");
@@ -6058,7 +6085,15 @@ window.addEventListener("message",async event=>{
       linehaulBtn.disabled=false;linehaulBtn.dataset.busy="0";
       setLinehaulSpxSyncStatus("Extension disconnected — "+reason,"error");
     }
-    if(inboundBusy||deliveryBusy||linehaulBusy){
+    if(firstMileBusy){
+      clearBadocBridgeCommandWatchdog("first-mile-orders");
+      clearBadocBridgeCommandWatchdog("first-mile-tasks");
+      clearBadocFirstMileProgressWatchdog("first-mile-orders");
+      clearBadocFirstMileProgressWatchdog("first-mile-tasks");
+      const message="Extension disconnected during First Mile sync — "+reason;
+      window.__badocFailFirstMileSequence?.(message);
+    }
+    if(inboundBusy||deliveryBusy||linehaulBusy||firstMileBusy){
       window.__badocOperationModalFinish?.("SPX Extension Disconnected",reason,[],"error");
     }
     return;
@@ -6079,6 +6114,24 @@ window.addEventListener("message",async event=>{
     return;
   }
 
+  if(data.type==="BADOC_SPX_COMMAND_FORWARDED" && (data.kind==="first-mile-orders"||data.kind==="first-mile-tasks")){
+    clearBadocBridgeCommandWatchdog(data.kind);
+    const orders=data.kind==="first-mile-orders";
+    const status=$(orders?"firstMileOrdersStatus":"firstMileTasksStatus");
+    if(status)status.textContent="Command forwarded to extension background. Waiting for SPX export startup…";
+    armBadocBridgeCommandWatchdog(data.kind);
+    return;
+  }
+  if(data.type==="BADOC_SPX_COMMAND_ACCEPTED" && (data.kind==="first-mile-orders"||data.kind==="first-mile-tasks")){
+    clearBadocBridgeCommandWatchdog(data.kind);
+    const orders=data.kind==="first-mile-orders";
+    const status=$(orders?"firstMileOrdersStatus":"firstMileTasksStatus");
+    if(status)status.textContent=data.message||"Extension accepted the First Mile export request…";
+    armBadocFirstMileProgressWatchdog(data.kind);
+    return;
+  }
+
+
   if(data.type==="BADOC_SPX_PROGRESS"){
     const phase=String(data.phase||"");
     const kind=String(data.kind||"");
@@ -6089,6 +6142,9 @@ window.addEventListener("message",async event=>{
     else if(kind==="parcel-delivery" || phase.startsWith("parcel-delivery"))armBadocSyncWatchdog("delivery",data.trackingStatus||badocActiveDeliveryStatus);
     else armBadocSyncWatchdog("linehaul");
     if(kind==="first-mile-orders" || kind==="first-mile-tasks" || phase.startsWith("first-mile")){
+      const firstMileKind=kind==="first-mile-tasks"?"first-mile-tasks":"first-mile-orders";
+      clearBadocBridgeCommandWatchdog(firstMileKind);
+      armBadocFirstMileProgressWatchdog(firstMileKind);
       const orders=kind==="first-mile-orders" || phase.includes("orders");
       const status=$(orders?"firstMileOrdersStatus":"firstMileTasksStatus");
       if(status)status.textContent=data.message||"Exporting First Mile data from SPX…";
@@ -6181,6 +6237,9 @@ window.addEventListener("message",async event=>{
 
   if(data.type==="BADOC_SPX_FIRST_MILE_ORDERS_CSV" || data.type==="BADOC_SPX_FIRST_MILE_TASKS_CSV"){
     const orders=data.type==="BADOC_SPX_FIRST_MILE_ORDERS_CSV";
+    const firstMileKind=orders?"first-mile-orders":"first-mile-tasks";
+    clearBadocBridgeCommandWatchdog(firstMileKind);
+    clearBadocFirstMileProgressWatchdog(firstMileKind);
     const key=orders?"badoc_first_mile_orders_csv_local_v1":"badoc_first_mile_tasks_csv_local_v1";
     const statusId=orders?"firstMileOrdersStatus":"firstMileTasksStatus";
     const resultId=orders?"firstMileOrdersResult":"firstMileTasksResult";
@@ -6202,6 +6261,7 @@ window.addEventListener("message",async event=>{
     }catch(error){
       const status=$(statusId);if(status)status.textContent=`Import failed: ${error.message}`;
       window.__badocOperationModalFinish?.("First Mile Import Failed",error.message,[],"error");
+      window.__badocFirstMileSequenceResult?.(orders?"orders":"tasks",false,error.message||"Local save failed.");
     }finally{
       if(!orders){const btn=$("syncFirstMileAll");if(btn){btn.disabled=false;btn.dataset.busy="0";}}
     }
@@ -6211,6 +6271,8 @@ window.addEventListener("message",async event=>{
     clearBadocSyncWatchdog("inbound");clearBadocSyncWatchdog("delivery");clearBadocSyncWatchdog("linehaul");
     console.error("BADOC SPX bridge error:",data.message);
     if(data.kind==="first-mile-orders" || data.kind==="first-mile-tasks"){
+      clearBadocBridgeCommandWatchdog(data.kind);
+      clearBadocFirstMileProgressWatchdog(data.kind);
       const orders=data.kind==="first-mile-orders";
       const status=$(orders?"firstMileOrdersStatus":"firstMileTasksStatus");
       if(status)status.textContent=`Export failed: ${data.message||"Unknown error"}`;
