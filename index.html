@@ -5695,6 +5695,7 @@ async function beginParcelInboundSpxBridgeSync(event){
   window.__badocOperationModalStart?.(modalTitle,"Connecting to SPX and requesting the same inbound export used by Planning Board (Received, Transporting, Transported, LH Packed, and Packing)…");
   setParcelInboundSpxSyncStatus("Connecting to SPX…","working");
   armBadocSyncWatchdog("inbound");
+  armBadocBridgeCommandWatchdog("parcel-inbound");
   postBadocSpxMessage("BADOC_START_PARCEL_INBOUND_SYNC");
 }
 
@@ -5825,6 +5826,25 @@ function armBadocSyncWatchdog(kind,statusId){
       window.__badocOperationModalFinish?.("Linehaul Sync Timed Out",message,[],"error");
     }
   },5*60*1000);
+}
+
+const BADOC_BRIDGE_COMMAND_TIMERS=Object.create(null);
+function clearBadocBridgeCommandWatchdog(kind){
+  if(BADOC_BRIDGE_COMMAND_TIMERS[kind])clearTimeout(BADOC_BRIDGE_COMMAND_TIMERS[kind]);
+  delete BADOC_BRIDGE_COMMAND_TIMERS[kind];
+}
+function armBadocBridgeCommandWatchdog(kind){
+  clearBadocBridgeCommandWatchdog(kind);
+  BADOC_BRIDGE_COMMAND_TIMERS[kind]=setTimeout(()=>{
+    clearBadocBridgeCommandWatchdog(kind);
+    if(kind==="parcel-inbound" && BADOC_INBOUND_SYNC_BUTTON_IDS.some(id=>$(id)?.dataset.busy==="1")){
+      clearBadocSyncWatchdog("inbound");
+      setBadocInboundSyncButtonsBusy(false);
+      const message="The extension did not acknowledge the Received sync request. Check that the updated Badoc Hub extension is enabled, then reload the extension and this dashboard.";
+      setParcelInboundSpxSyncStatus(message,"error");
+      window.__badocOperationModalFinish?.("SPX Sync Request Not Received",message,[],"error");
+    }
+  },12000);
 }
 
 function setDeliveringBatchReconcileStatus(message,state=""){
@@ -6020,6 +6040,7 @@ window.addEventListener("message",async event=>{
     const linehaulBtn=$("syncLinehaulFromSPX");
     const linehaulBusy=linehaulBtn?.dataset.busy==="1";
     if(inboundBusy){
+      clearBadocBridgeCommandWatchdog("parcel-inbound");
       clearBadocSyncWatchdog("inbound");
       setBadocInboundSyncButtonsBusy(false);
       setParcelInboundSpxSyncStatus("Extension disconnected — "+reason,"error");
@@ -6040,6 +6061,12 @@ window.addEventListener("message",async event=>{
     if(inboundBusy||deliveryBusy||linehaulBusy){
       window.__badocOperationModalFinish?.("SPX Extension Disconnected",reason,[],"error");
     }
+    return;
+  }
+
+  if(data.type==="BADOC_SPX_COMMAND_ACCEPTED" && data.kind==="parcel-inbound"){
+    clearBadocBridgeCommandWatchdog("parcel-inbound");
+    setParcelInboundSpxSyncStatus(data.message||"SPX extension accepted the Received sync request. Submitting export…","working");
     return;
   }
 
@@ -6133,6 +6160,7 @@ window.addEventListener("message",async event=>{
       setParcelInboundSpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
       window.__badocOperationModalFinish?.(badocInboundSyncContext==="forecast"?"Sync Volume Forecast Failed":"Sync Received Failed","Your existing Parcel Count data was not cleared.",[["Error",err.message||"Unknown error"]],"error");
     }finally{
+      clearBadocBridgeCommandWatchdog("parcel-inbound");
       clearBadocSyncWatchdog("inbound");
       setBadocInboundSyncButtonsBusy(false);
     }
@@ -6191,6 +6219,7 @@ window.addEventListener("message",async event=>{
       badocActiveDeliveryStatus="";
       window.__badocOperationModalFinish?.("Delivery Status Sync Failed","Your existing Parcel Count data was not cleared.",[["Error",data.message||"Unknown error"]],"error");
     }else if(data.kind==="parcel-inbound"){
+      clearBadocBridgeCommandWatchdog("parcel-inbound");
       setBadocInboundSyncButtonsBusy(false);
       setParcelInboundSpxSyncStatus("Sync failed — existing Parcel Count data kept.","error");
       window.__badocOperationModalFinish?.(badocInboundSyncContext==="forecast"?"Sync Volume Forecast Failed":"Sync Received Failed","Your existing Parcel Count data was not cleared.",[["Error",data.message||"Unknown error"]],"error");
