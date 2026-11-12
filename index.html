@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v52">
+<meta name="badoc-app-version" content="v53">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -6012,6 +6012,36 @@ window.addEventListener("message",async event=>{
   if(event.source!==window)return;
   const data=event.data||{};
   if(data.source!==BADOC_SPX_BRIDGE_SOURCE)return;
+
+  if(data.type==="BADOC_BRIDGE_DISCONNECTED"){
+    const reason=String(data.message||"The SPX extension connection was lost. Reload the extension and retry.").trim();
+    const inboundBusy=BADOC_INBOUND_SYNC_BUTTON_IDS.some(id=>$(id)?.dataset.busy==="1");
+    const deliveryBusy=!!badocActiveDeliveryStatus;
+    const linehaulBtn=$("syncLinehaulFromSPX");
+    const linehaulBusy=linehaulBtn?.dataset.busy==="1";
+    if(inboundBusy){
+      clearBadocSyncWatchdog("inbound");
+      setBadocInboundSyncButtonsBusy(false);
+      setParcelInboundSpxSyncStatus("Extension disconnected — "+reason,"error");
+    }
+    if(deliveryBusy){
+      clearBadocSyncWatchdog("delivery");
+      const cfg=BADOC_DELIVERY_STATUS_BUTTONS[badocActiveDeliveryStatus];
+      const btn=cfg&&$(cfg.button);
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+      setIndividualDeliveryStatus(badocActiveDeliveryStatus,"Extension disconnected — "+reason,"error");
+      badocActiveDeliveryStatus="";
+    }
+    if(linehaulBusy){
+      clearBadocSyncWatchdog("linehaul");
+      linehaulBtn.disabled=false;linehaulBtn.dataset.busy="0";
+      setLinehaulSpxSyncStatus("Extension disconnected — "+reason,"error");
+    }
+    if(inboundBusy||deliveryBusy||linehaulBusy){
+      window.__badocOperationModalFinish?.("SPX Extension Disconnected",reason,[],"error");
+    }
+    return;
+  }
 
   if(data.type==="BADOC_SPX_PROGRESS"){
     const phase=String(data.phase||"");
