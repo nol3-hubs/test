@@ -171,6 +171,12 @@
         }
       }
       port.postMessage(payload);
+      if (data.type === "BADOC_START_PARCEL_INBOUND_SYNC") {
+        emit("BADOC_SPX_COMMAND_FORWARDED", {
+          kind: "parcel-inbound",
+          message: "Received sync command forwarded to the extension background."
+        });
+      }
     } catch (error) {
       emit("BADOC_SPX_ERROR", { message: error?.message || String(error) });
     }
