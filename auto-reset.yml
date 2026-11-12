@@ -1,0 +1,34 @@
+name: Badoc Hub cloud save + 2 AM reset (Manila)
+
+on:
+  schedule:
+    - cron: '30 17 * * *'  # 01:30 Manila — primary preflight
+    - cron: '45 17 * * *'  # 01:45 Manila — backup preflight
+  workflow_dispatch:       # Manual runs are preflight-only; they never save or reset.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: badoc-hub-github-cloud-reset
+  cancel-in-progress: false
+
+jobs:
+  cloud-save-reset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null
+          npm i playwright@1.49.0
+          npx playwright install --with-deps chromium
+      - name: Refresh shared cloud, save Daily History, then reset
+        run: node tools/auto-reset.mjs
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
