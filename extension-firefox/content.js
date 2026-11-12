@@ -63,14 +63,16 @@
     if (shuttingDown || port) return;
     try {
       port = extApi.runtime.connect({ name: "BADOC_PAGE" });
-      port.onMessage.addListener(msg => emit(msg.type, msg));
+      port.onMessage.addListener(msg => {
+        if (msg?.type === "BADOC_BRIDGE_READY") emit("BADOC_BRIDGE_READY", { version: VERSION });
+        else emit(msg.type, msg);
+      });
       port.onDisconnect.addListener(() => {
         const reason = extApi.runtime.lastError?.message || "Bridge connection closed.";
         port = null;
         emit("BADOC_BRIDGE_DISCONNECTED", { message: reason });
         scheduleReconnect();
       });
-      emit("BADOC_BRIDGE_READY", { version: VERSION });
     } catch (error) {
       port = null;
       emit("BADOC_BRIDGE_DISCONNECTED", { message: error?.message || String(error) });
@@ -84,7 +86,11 @@
     if (data.source !== BADOC_SOURCE) return;
 
     if (data.type === "BADOC_BRIDGE_HELLO") {
-      emit("BADOC_BRIDGE_READY", { version: VERSION });
+      if (port) emit("BADOC_BRIDGE_READY", { version: VERSION });
+      else {
+        emit("BADOC_BRIDGE_DISCONNECTED", { message: "Extension background connection is not ready yet. Reconnecting…" });
+        scheduleReconnect();
+      }
       return;
     }
 
