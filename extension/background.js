@@ -230,56 +230,56 @@ async function withTimeout(promise, ms, label) {
 }
 
 async function extensionFetchText(url, init = {}) {
-  return await withTimeout(
-    fetch(url, {
-      credentials: "include",
-      cache: "no-store",
-      redirect: "follow",
-      ...init,
-      headers: {
-        "Accept": "application/json, text/plain, */*",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        ...(init.headers || {})
-      }
-    }),
-    FETCH_TIMEOUT_MS,
-    "SPX request"
-  ).then(async response => {
-    const text = await response.text();
-    return {
-      status: response.status,
-      ok: response.ok,
-      contentType: response.headers.get("content-type") || "",
-      contentDisposition: response.headers.get("content-disposition") || "",
-      text
-    };
-  });
+  const controller = new AbortController();
+  try {
+    return await withTimeout((async () => {
+      const response = await fetch(url, {
+        credentials: "include", cache: "no-store", redirect: "follow",
+        ...init, signal: controller.signal,
+        headers: {
+          "Accept": "application/json, text/plain, */*",
+          "Cache-Control": "no-cache", "Pragma": "no-cache",
+          ...(init.headers || {})
+        }
+      });
+      const text = await response.text();
+      return {
+        status: response.status, ok: response.ok,
+        contentType: response.headers.get("content-type") || "",
+        contentDisposition: response.headers.get("content-disposition") || "",
+        text
+      };
+    })(), FETCH_TIMEOUT_MS, "SPX request");
+  } catch (error) {
+    controller.abort();
+    throw error;
+  }
 }
 
 async function extensionFetchBuffer(url, init = {}) {
-  return await withTimeout(
-    fetch(url, {
-      credentials: "include",
-      cache: "no-store",
-      redirect: "follow",
-      ...init,
-      headers: {
-        "Accept": "*/*",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        ...(init.headers || {})
-      }
-    }),
-    FETCH_TIMEOUT_MS,
-    "SPX file request"
-  ).then(async response => ({
-    status: response.status,
-    ok: response.ok,
-    contentType: response.headers.get("content-type") || "",
-    contentDisposition: response.headers.get("content-disposition") || "",
-    buffer: await response.arrayBuffer()
-  }));
+  const controller = new AbortController();
+  try {
+    return await withTimeout((async () => {
+      const response = await fetch(url, {
+        credentials: "include", cache: "no-store", redirect: "follow",
+        ...init, signal: controller.signal,
+        headers: {
+          "Accept": "*/*", "Cache-Control": "no-cache", "Pragma": "no-cache",
+          ...(init.headers || {})
+        }
+      });
+      const buffer = await response.arrayBuffer();
+      return {
+        status: response.status, ok: response.ok,
+        contentType: response.headers.get("content-type") || "",
+        contentDisposition: response.headers.get("content-disposition") || "",
+        buffer
+      };
+    })(), FETCH_TIMEOUT_MS, "SPX file request");
+  } catch (error) {
+    controller.abort();
+    throw error;
+  }
 }
 
 function firstMileRowsToCsv(rows) {
@@ -1969,6 +1969,7 @@ chrome.runtime.onConnect.addListener(port => {
 
     if (type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || type === "BADOC_START_FIRST_MILE_TASKS_SYNC") {
       const kind = type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" ? "first-mile-orders" : "first-mile-tasks";
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", { kind, message: `Extension background accepted ${kind === "first-mile-orders" ? "First Mile Orders" : "First Mile Tasks"} export. Preparing SPX request…` });
       const job = reserveActiveJob(kind, port, { selectedDate: String(message?.selectedDate || "").trim() });
       if (!job) { failBusy(kind); return; }
       void runFirstMileExportJob(job);
