@@ -176,6 +176,11 @@
           kind: "parcel-inbound",
           message: "Received sync command forwarded to the extension background."
         });
+      } else if (data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" || data.type === "BADOC_START_FIRST_MILE_TASKS_SYNC") {
+        emit("BADOC_SPX_COMMAND_FORWARDED", {
+          kind: data.type === "BADOC_START_FIRST_MILE_ORDERS_SYNC" ? "first-mile-orders" : "first-mile-tasks",
+          message: "First Mile command forwarded to the extension background."
+        });
       }
     } catch (error) {
       emit("BADOC_SPX_ERROR", { message: error?.message || String(error) });
