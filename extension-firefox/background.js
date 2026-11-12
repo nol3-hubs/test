@@ -1845,6 +1845,7 @@ extApi.runtime.onConnect.addListener(port => {
         hubId: Number(message?.hubId || 0) || 0
       });
       if (!job) { failBusy("parcel-inbound"); return; }
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", { kind: "parcel-inbound", message: "Extension received the Received sync request. Starting SPX export…" });
       void runParcelInboundJob(job);
       return;
     }
