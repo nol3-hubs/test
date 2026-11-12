@@ -2047,13 +2047,15 @@ chrome.runtime.onConnect.addListener(port => {
     }
 
     if (type === "BADOC_START_PARCEL_INBOUND_SYNC") {
+      // Acknowledge receipt immediately, before reserving/starting the export job.
+      // The dashboard can now distinguish a port-delivery failure from a job-start failure.
+      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", { kind: "parcel-inbound", message: "Extension background received the Received sync request. Preparing SPX export…" });
       const job = reserveActiveJob("parcel-inbound", port, {
         hubName: String(message?.hubName || "").trim(),
         hubCode: String(message?.hubCode || "").trim(),
         hubId: Number(message?.hubId || 0) || 0
       });
       if (!job) { failBusy("parcel-inbound"); return; }
-      sendToPort(port, "BADOC_SPX_COMMAND_ACCEPTED", { kind: "parcel-inbound", message: "Extension received the Received sync request. Starting SPX export…" });
       void runParcelInboundJob(job);
       return;
     }
