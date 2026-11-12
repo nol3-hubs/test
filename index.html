@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta name="badoc-main-app" content="v2">
-<meta name="badoc-app-version" content="v50">
+<meta name="badoc-app-version" content="v51">
 
 <script>(function(){try{var t=localStorage.getItem('badochub-theme');if(t!=='dark'&&t!=='light'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 
@@ -1050,7 +1050,7 @@ html[data-theme="light"] #firstMile .fm-task-other{color:#475467!important;backg
   <div class="top">
   <div class="title"><h1 id="pageTitle">Dashboard</h1><p id="batchLabel"></p></div>
   <div class="top-header-info">
-    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v50</span>
+    <span class="app-version-badge" id="appVersionBadge" title="Badoc Hub application version">APP v51</span>
     <div class="app-health-indicators" id="appHealthIndicators" aria-label="App health">
       <button type="button" class="health-indicator health-summary" id="healthSummary" aria-expanded="false" aria-controls="healthDetails" title="Show app status" >
         <i></i><b>Sync</b><em>Checking</em>
@@ -5694,6 +5694,7 @@ async function beginParcelInboundSpxBridgeSync(event){
   const modalTitle=requestedContext==="forecast"?"Sync Volume Forecast":"Sync Received / Transported / LH Packed / Packing";
   window.__badocOperationModalStart?.(modalTitle,"Connecting to SPX and requesting the same inbound export used by Planning Board (Received, Transporting, Transported, LH Packed, and Packing)…");
   setParcelInboundSpxSyncStatus("Connecting to SPX…","working");
+  armBadocSyncWatchdog("inbound");
   postBadocSpxMessage("BADOC_START_PARCEL_INBOUND_SYNC");
 }
 
@@ -5753,6 +5754,7 @@ async function beginIndividualParcelDeliverySync(statusId){
   if(btn){btn.dataset.busy="1";btn.disabled=true;}
   window.__badocOperationModalStart?.(`Sync ${cfg.name}`,`Requesting SPX ${cfg.name}-only export. Assigned Time: ${day.assignedLabel}`);
   setIndividualDeliveryStatus(statusId,`Connecting to SPX · Assigned ${day.assignedLabel}`,"working");
+  armBadocSyncWatchdog("delivery",statusId);
   postBadocSpxMessage("BADOC_START_PARCEL_DELIVERY_SYNC",{
     trackingStatus:String(statusId),
     statusName:cfg.name,
@@ -5792,6 +5794,38 @@ function postBadocSpxMessage(type,data={}){
 }
 
 let badocSpxSyncPromise=null;
+
+const BADOC_SYNC_WATCHDOGS=Object.create(null);
+function clearBadocSyncWatchdog(kind){
+  const timer=BADOC_SYNC_WATCHDOGS[kind];
+  if(timer)clearTimeout(timer);
+  delete BADOC_SYNC_WATCHDOGS[kind];
+}
+function armBadocSyncWatchdog(kind,statusId){
+  clearBadocSyncWatchdog(kind);
+  BADOC_SYNC_WATCHDOGS[kind]=setTimeout(()=>{
+    clearBadocSyncWatchdog(kind);
+    const message="No response from SPX after 5 minutes. The sync was stopped; check the SPX tab and retry.";
+    if(kind==="inbound"){
+      setBadocInboundSyncButtonsBusy(false);
+      setParcelInboundSpxSyncStatus(message,"error");
+      window.__badocOperationModalFinish?.("Received Sync Timed Out",message,[],"error");
+    }else if(kind==="delivery"){
+      const cfg=BADOC_DELIVERY_STATUS_BUTTONS[String(statusId||badocActiveDeliveryStatus)];
+      const btn=cfg&&$(cfg.button);
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+      if(statusId||badocActiveDeliveryStatus)setIndividualDeliveryStatus(String(statusId||badocActiveDeliveryStatus),message,"error");
+      else setParcelDeliverySpxSyncStatus(message,"error");
+      badocActiveDeliveryStatus="";
+      window.__badocOperationModalFinish?.("Delivery Sync Timed Out",message,[],"error");
+    }else if(kind==="linehaul"){
+      const btn=$("syncLinehaulFromSPX");
+      if(btn){btn.disabled=false;btn.dataset.busy="0";}
+      setLinehaulSpxSyncStatus(message,"error");
+      window.__badocOperationModalFinish?.("Linehaul Sync Timed Out",message,[],"error");
+    }
+  },5*60*1000);
+}
 
 function setDeliveringBatchReconcileStatus(message,state=""){
   if(state==="success")message=badocParcelSyncStatusText("batch",true);
@@ -5970,6 +6004,7 @@ async function beginLinehaulSpxBridgeSync(){
   if(btn)btn.disabled=true;
   window.__badocOperationModalStart?.("Sync Linehaul from SPX","Connecting to SPX and requesting linehaul tasks…");
   setLinehaulSpxSyncStatus("Connecting to SPX…","working");
+  armBadocSyncWatchdog("linehaul");
   postBadocSpxMessage("BADOC_START_LINEHAUL_SYNC");
 }
 
@@ -5981,6 +6016,9 @@ window.addEventListener("message",async event=>{
   if(data.type==="BADOC_SPX_PROGRESS"){
     const phase=String(data.phase||"");
     const kind=String(data.kind||"");
+    if(kind==="parcel-inbound" || phase.startsWith("parcel-") && !phase.startsWith("parcel-delivery"))armBadocSyncWatchdog("inbound");
+    else if(kind==="parcel-delivery" || phase.startsWith("parcel-delivery"))armBadocSyncWatchdog("delivery",data.trackingStatus||badocActiveDeliveryStatus);
+    else armBadocSyncWatchdog("linehaul");
     if(kind==="first-mile-orders" || kind==="first-mile-tasks" || phase.startsWith("first-mile")){
       const orders=kind==="first-mile-orders" || phase.includes("orders");
       const status=$(orders?"firstMileOrdersStatus":"firstMileTasksStatus");
@@ -5996,6 +6034,7 @@ window.addEventListener("message",async event=>{
   }
 
   if(data.type==="BADOC_SPX_PARCEL_DELIVERY_CSV"){
+    clearBadocSyncWatchdog("delivery");
     const statusId=String(data.trackingStatus||data.statusId||badocActiveDeliveryStatus||"");
     const cfg=BADOC_DELIVERY_STATUS_BUTTONS[statusId]||BADOC_DELIVERY_STATUS_BUTTONS[badocActiveDeliveryStatus];
     const btn=cfg?$(cfg.button):$("syncParcelDeliveryFromSPX");
@@ -6133,6 +6172,7 @@ window.addEventListener("message",async event=>{
   }
 
   if(data.type==="BADOC_SPX_CSV"){
+    clearBadocSyncWatchdog("linehaul");
     const btn=$("syncLinehaulFromSPX");
     try{
       setLinehaulSpxSyncStatus(`Importing SPX Linehaul task ${data.taskId||""}…`,"working");
@@ -11463,8 +11503,8 @@ document.getElementById("eodRefreshBtn")?.addEventListener("click",load);load();
   const STEPS=[
     {id:"cloud",label:"Shared cloud data",run:async()=>{
       if(typeof window.__badocSharedPullNow!=="function")return skip("Cloud sync not ready");
-      await window.__badocSharedPullNow();
-      await sleep(1200);
+      await Promise.race([window.__badocSharedPullNow(),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Shared cloud pull timed out after 20 seconds. SPX imports will continue; cloud data can retry in the background.")),20000))]);
+      await sleep(300);
       return ok("Latest shared data loaded");
     }},
     {id:"inbound",label:"Received / Transported (SPX)",run:spxButtonStep("syncParcelInboundFromSPX","parcelInboundSpxSyncStatus")},
