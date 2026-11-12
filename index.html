@@ -5846,7 +5846,7 @@ function armBadocBridgeCommandWatchdog(kind){
       clearBadocSyncWatchdog("inbound");
       setBadocInboundSyncButtonsBusy(false);
       const message="The Received sync command reached the extension page bridge, but the background service worker did not start the export. Open the extension's service worker console for errors, then reload the extension.";
-      setParcelInboundSyncStatus(message,"error");
+      setParcelInboundSpxSyncStatus(message,"error");
       window.__badocOperationModalFinish?.("SPX Sync Request Not Received",message,[],"error");
     }else if((kind==="first-mile-orders"||kind==="first-mile-tasks") && $("syncFirstMileAll")?.dataset.busy==="1"){
       const message="The First Mile command reached the extension page bridge, but the background service worker did not acknowledge it. Reload the extension and retry.";
